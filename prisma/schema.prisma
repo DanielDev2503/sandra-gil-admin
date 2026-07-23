@@ -1,0 +1,53 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Producto {
+  id          String   @id @default(uuid())
+  nombre      String
+  descripcion String
+  aroma       String
+  dimensiones String
+  precio      Float
+  stock       Int
+  url_imagen  String
+  activo      Boolean  @default(true)
+  items       ItemPedido[]
+}
+
+model Pedido {
+  id                   String     @id @default(uuid())
+  cliente_nombre       String
+  cliente_email        String
+  cliente_telefono     String
+  ciudad               String
+  direccion_envio      String
+  notas_entrega        String?
+  total_productos      Float
+  costo_envio          Float
+  total_pagado         Float
+  estado_pago          String     @default("pendiente") // 'pendiente', 'pagado', 'fallido'
+  id_transaccion_wompi String?
+  creado_en            DateTime   @default(now())
+  estado_envio         String     @default("PENDING") // PENDING, APPROVED, SHIPPED, DELIVERED, DECLINED
+  numero_guia          String?
+  notas_admin          String?
+  items                ItemPedido[]
+}
+
+model ItemPedido {
+  id              String   @id @default(uuid())
+  pedido_id       String
+  pedido          Pedido   @relation(fields: [pedido_id], references: [id], onDelete: Cascade)
+  producto_id     String
+  producto        Producto @relation(fields: [producto_id], references: [id])
+  cantidad        Int
+  precio_unitario Float
+}
