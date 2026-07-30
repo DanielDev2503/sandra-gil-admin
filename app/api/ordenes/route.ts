@@ -7,16 +7,20 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const estadoEnvio = searchParams.get('estado_envio');
   const estadoPago = searchParams.get('estado_pago');
+  const ciudad = searchParams.get('ciudad');
   const page = parseInt(searchParams.get('page') ?? '1');
   const limit = 20;
 
   try {
+    const whereClause = {
+      ...(estadoEnvio ? { estado_envio: estadoEnvio } : {}),
+      ...(estadoPago ? { estado_pago: estadoPago } : {}),
+      ...(ciudad ? { ciudad: { contains: ciudad, mode: 'insensitive' as const } } : {}),
+    };
+
     const [pedidos, total] = await Promise.all([
       prisma.pedido.findMany({
-        where: {
-          ...(estadoEnvio ? { estado_envio: estadoEnvio } : {}),
-          ...(estadoPago ? { estado_pago: estadoPago } : {}),
-        },
+        where: whereClause,
         include: {
           items: {
             include: {
@@ -31,10 +35,7 @@ export async function GET(request: Request) {
         take: limit,
       }),
       prisma.pedido.count({
-        where: {
-          ...(estadoEnvio ? { estado_envio: estadoEnvio } : {}),
-          ...(estadoPago ? { estado_pago: estadoPago } : {}),
-        },
+        where: whereClause,
       }),
     ]);
 

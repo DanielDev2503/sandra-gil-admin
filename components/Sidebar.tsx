@@ -9,12 +9,14 @@ import {
   ShoppingBag,
   Flame,
   LogOut,
+  Sparkles,
 } from 'lucide-react';
 
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/productos', label: 'Productos', icon: Package },
   { href: '/admin/ordenes', label: 'Órdenes', icon: ShoppingBag },
+  { href: '/admin/configuracion-ia', label: 'Configuración IA', icon: Sparkles },
 ];
 
 export default function Sidebar() {

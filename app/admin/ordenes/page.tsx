@@ -11,6 +11,8 @@ import {
   Loader2,
   X,
   Truck,
+  MapPin,
+  MessageCircle,
 } from 'lucide-react';
 
 interface ItemPedido {
@@ -45,6 +47,18 @@ const ESTADOS_ENVIO = [
   { value: 'DECLINED', label: 'Cancelado', color: 'text-red-400' },
 ];
 
+const CIUDADES = [
+  { value: '', label: 'Todos los municipios' },
+  { value: 'Bogotá', label: 'Bogotá D.C.' },
+  { value: 'Chía', label: 'Chía' },
+  { value: 'Cajicá', label: 'Cajicá' },
+  { value: 'Cota', label: 'Cota' },
+  { value: 'Zipaquirá', label: 'Zipaquirá' },
+  { value: 'Sopó', label: 'Sopó' },
+  { value: 'Tabio', label: 'Tabio' },
+  { value: 'Tenjo', label: 'Tenjo' },
+];
+
 const estadoBadge: Record<string, string> = {
   PENDING: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
   APPROVED: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
@@ -66,6 +80,7 @@ export default function OrdenesPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [filtroEstadoEnvio, setFiltroEstadoEnvio] = useState('');
+  const [filtroCiudad, setFiltroCiudad] = useState('');
 
   const [selectedPedido, setSelectedPedido] = useState<Pedido | null>(null);
   const [editEstado, setEditEstado] = useState('');
@@ -77,6 +92,7 @@ export default function OrdenesPage() {
     setLoading(true);
     const params = new URLSearchParams({ page: String(page) });
     if (filtroEstadoEnvio) params.set('estado_envio', filtroEstadoEnvio);
+    if (filtroCiudad) params.set('ciudad', filtroCiudad);
     const r = await fetch(`/api/ordenes?${params}`);
     const data = await r.json();
     setPedidos(data.pedidos ?? []);
@@ -88,7 +104,7 @@ export default function OrdenesPage() {
   useEffect(() => {
     fetchPedidos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtroEstadoEnvio, page]);
+  }, [filtroEstadoEnvio, filtroCiudad, page]);
 
   const openModal = (p: Pedido) => {
     setSelectedPedido(p);
@@ -110,6 +126,27 @@ export default function OrdenesPage() {
     fetchPedidos();
   };
 
+  const handleWhatsApp = () => {
+    if (!selectedPedido) return;
+    const phone = selectedPedido.cliente_telefono.replace(/\D/g, '');
+    const phoneFormatted = phone.startsWith('57') ? phone : `57${phone}`;
+
+    const guiaText = editGuia ? `📦 Guía: ${editGuia}` : '📦 Guía: Pendiente de asignación';
+    const estadoLabel = ESTADOS_ENVIO.find((e) => e.value === editEstado)?.label ?? editEstado;
+
+    const message = encodeURIComponent(
+      `¡Hola ${selectedPedido.cliente_nombre}! 🕯️\n\n` +
+      `Tu pedido de *Sandra Gil Velas* ha sido actualizado:\n\n` +
+      `📋 Estado: *${estadoLabel}*\n` +
+      `${guiaText}\n` +
+      `💰 Total: ${formatCOP(selectedPedido.total_pagado)}\n` +
+      `📍 Envío a: ${selectedPedido.ciudad}\n\n` +
+      `¡Gracias por tu compra! ✨`
+    );
+
+    window.open(`https://wa.me/${phoneFormatted}?text=${message}`, '_blank');
+  };
+
   const formatCOP = (v: number) =>
     new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(v);
 
@@ -123,22 +160,40 @@ export default function OrdenesPage() {
         </div>
       </div>
 
-      {/* Filter tabs */}
-      <div className="flex items-center gap-1 mb-6 bg-[#1a1a2e] border border-white/5 p-1.5 rounded-xl w-fit flex-wrap">
-        <Filter className="w-4 h-4 text-slate-500 ml-2 mr-1" />
-        {ESTADOS_ENVIO.map((e) => (
-          <button
-            key={e.value}
-            onClick={() => { setFiltroEstadoEnvio(e.value); setPage(1); }}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-              filtroEstadoEnvio === e.value
+      {/* Filters row */}
+      <div className="flex flex-wrap items-center gap-4 mb-6">
+        {/* Estado tabs */}
+        <div className="flex items-center gap-1 bg-[#1a1a2e] border border-white/5 p-1.5 rounded-xl w-fit flex-wrap">
+          <Filter className="w-4 h-4 text-slate-500 ml-2 mr-1" />
+          {ESTADOS_ENVIO.map((e) => (
+            <button
+              key={e.value}
+              onClick={() => { setFiltroEstadoEnvio(e.value); setPage(1); }}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${filtroEstadoEnvio === e.value
                 ? 'bg-[#e8b86d] text-[#1a1a2e]'
                 : 'text-slate-400 hover:text-white hover:bg-white/5'
-            }`}
+                }`}
+            >
+              {e.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Ciudad filter */}
+        <div className="flex items-center gap-2">
+          <MapPin className="w-4 h-4 text-slate-500" />
+          <select
+            value={filtroCiudad}
+            onChange={(e) => { setFiltroCiudad(e.target.value); setPage(1); }}
+            className="bg-[#1a1a2e] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all"
           >
-            {e.label}
-          </button>
-        ))}
+            {CIUDADES.map((c) => (
+              <option key={c.value} value={c.value} className="bg-slate-800 text-white">
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Table */}
@@ -296,7 +351,9 @@ export default function OrdenesPage() {
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all"
                 >
                   {ESTADOS_ENVIO.filter((e) => e.value !== '').map((e) => (
-                    <option key={e.value} value={e.value}>{e.label}</option>
+                    <option key={e.value} value={e.value} className="bg-slate-800 text-white">
+                      {e.label}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -326,7 +383,19 @@ export default function OrdenesPage() {
               </div>
 
               {/* Actions */}
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="flex flex-wrap gap-3 pt-2">
+                {/* WhatsApp button */}
+                <button
+                  type="button"
+                  onClick={handleWhatsApp}
+                  className="flex items-center gap-2 px-4 py-3 bg-green-600/10 hover:bg-green-600/20 text-green-400 border border-green-600/20 font-semibold rounded-xl transition-all active:scale-95 text-sm"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  Notificar WhatsApp
+                </button>
+
+                <div className="flex-1" />
+
                 <button onClick={() => setSelectedPedido(null)}
                   className="px-5 py-3 text-sm font-medium text-slate-400 hover:text-white hover:bg-white/5 rounded-xl transition-all">
                   Cancelar

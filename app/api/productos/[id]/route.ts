@@ -10,11 +10,23 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { nombre, descripcion, aroma, dimensiones, precio, stock, url_imagen, activo } = body;
+    const { nombre, descripcion, aroma, material, dimensiones, precio, stock, url_imagen, imagenes, activo, esBajoPedido } = body;
 
     const producto = await prisma.producto.update({
       where: { id },
-      data: { nombre, descripcion, aroma, dimensiones, precio, stock, url_imagen, activo },
+      data: {
+        nombre,
+        descripcion,
+        aroma,
+        material: material || null,
+        dimensiones,
+        precio: parseFloat(String(precio)),
+        stock: parseInt(String(stock), 10),
+        url_imagen,
+        imagenes: Array.isArray(imagenes) ? imagenes : [],
+        activo,
+        esBajoPedido: esBajoPedido ?? false,
+      },
     });
     return NextResponse.json(producto);
   } catch (error) {

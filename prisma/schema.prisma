@@ -10,16 +10,28 @@ datasource db {
 }
 
 model Producto {
-  id          String   @id @default(uuid())
-  nombre      String
-  descripcion String
-  aroma       String
-  dimensiones String
-  precio      Float
-  stock       Int
-  url_imagen  String
-  activo      Boolean  @default(true)
-  items       ItemPedido[]
+  id           String   @id @default(uuid())
+  nombre       String
+  descripcion  String
+  aroma        String
+  material     String?
+  dimensiones  String
+  precio       Float
+  stock        Int
+  esBajoPedido Boolean  @default(false)
+  url_imagen   String
+  imagenes     String[] @default([])
+  activo       Boolean  @default(true)
+  items        ItemPedido[]
+}
+
+model ConfiguracionIA {
+  id              String   @id @default("default")
+  promptGenerador String   @db.Text
+  promptImagen    String   @db.Text
+  temperatura     Float    @default(0.7)
+  modelo          String   @default("gemini-2.5-flash")
+  updatedAt       DateTime @updatedAt
 }
 
 model Pedido {
