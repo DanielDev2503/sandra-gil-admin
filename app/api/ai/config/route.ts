@@ -17,7 +17,7 @@ La vela debe verse elegante, premium y artesanal. Fondo neutro minimalista o sup
 Iluminación suave y cálida tipo estudio fotográfico. Estilo editorial de catálogo de lujo.
 Basado en esta descripción del producto: `,
   temperatura: 0.7,
-  modelo: 'gemini-2.5-flash',
+  modelo: 'gemini-2.0-flash',
 };
 
 export async function GET() {

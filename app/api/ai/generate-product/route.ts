@@ -55,7 +55,10 @@ export async function POST(request: Request) {
     const promptGenerador = config?.promptGenerador || DEFAULT_PROMPT_GENERADOR;
     const promptImagen = config?.promptImagen || DEFAULT_PROMPT_IMAGEN;
     const temperatura = config?.temperatura ?? 0.7;
-    const modelo = config?.modelo || 'gemini-2.5-flash';
+    let modelo = config?.modelo || 'gemini-2.0-flash';
+    if (modelo.includes('2.5')) {
+      modelo = modelo.replace('2.5', '2.0');
+    }
 
     const ai = new GoogleGenAI({ apiKey });
 
@@ -166,10 +169,10 @@ export async function POST(request: Request) {
       texto: textoGenerado,
       imagenes,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('AI generate-product error:', error);
     return NextResponse.json(
-      { error: 'Error interno al generar con IA' },
+      { error: error?.message || 'Error interno al generar con IA' },
       { status: 500 }
     );
   }
