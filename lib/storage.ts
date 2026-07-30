@@ -5,20 +5,20 @@ import { createClient } from '@/lib/supabase';
  * Retorna la URL pública del archivo subido.
  */
 export async function uploadProductImage(file: File): Promise<string> {
-  const supabase = createClient();
-  const ext = file.name.split('.').pop() ?? 'jpg';
-  const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-  const filePath = `velas/${uniqueName}`;
+  const formData = new FormData();
+  formData.append('file', file);
 
-  const { error } = await supabase.storage
-    .from('productos')
-    .upload(filePath, file, { upsert: true });
+  const response = await fetch('/api/productos/upload', {
+    method: 'POST',
+    body: formData,
+  });
 
-  if (error) {
-    throw new Error(`Error al subir imagen: ${error.message}`);
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || 'Error al subir imagen con marca de agua');
   }
 
-  const { data } = supabase.storage.from('productos').getPublicUrl(filePath);
+  const data = await response.json();
   return data.publicUrl;
 }
 

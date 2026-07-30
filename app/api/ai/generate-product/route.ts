@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { prisma } from '@/lib/db';
 import { createServerClient } from '@/lib/supabase-server';
+import { applyWatermark } from '@/lib/watermark';
 
 const DEFAULT_PROMPT_GENERADOR = `Eres un experto en marketing y copywriting para una marca artesanal de velas decorativas y aromáticas llamada "Sandra Gil". 
 Genera un JSON con los siguientes campos basándote en la imagen y descripción proporcionada:
@@ -126,8 +127,9 @@ export async function POST(request: Request) {
             const ext = mimeType.includes('jpeg') ? 'jpg' : 'png';
             const fileName = `velas/ai-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}.${ext}`;
 
-            // Convert base64 to buffer
-            const buffer = Buffer.from(part.inlineData.data, 'base64');
+            // Convert base64 to buffer and apply watermark
+            const originalBuffer = Buffer.from(part.inlineData.data, 'base64');
+            const buffer = await applyWatermark(originalBuffer);
 
             // Upload to Supabase Storage
             const { error: uploadError } = await supabase.storage
