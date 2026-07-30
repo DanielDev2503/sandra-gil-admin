@@ -12,6 +12,7 @@ import {
   ArrowRight,
   Loader2,
   Flame,
+  AlertCircle,
 } from 'lucide-react';
 import {
   LineChart,
@@ -45,6 +46,18 @@ interface DashboardData {
   estadosPedidos: Array<{ estado: string; cantidad: number }>;
   despachosPorCiudad: Array<{ ciudad: string; cantidad: number }>;
 }
+
+const DEFAULT_DATA: DashboardData = {
+  totalVentas: 0,
+  pedidosMes: 0,
+  pedidosPendientes: 0,
+  stockBajo: 0,
+  velasBajoPedido: 0,
+  ultimosPedidos: [],
+  ventasDiarias: [],
+  estadosPedidos: [],
+  despachosPorCiudad: [],
+};
 
 const estadoEnvioConfig: Record<string, { label: string; color: string }> = {
   PENDING: { label: 'Pendiente', color: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' },
@@ -97,77 +110,141 @@ function StatCard({
   );
 }
 
+function DashboardSkeleton() {
+  return (
+    <div className="animate-pulse space-y-8">
+      <div className="space-y-2">
+        <div className="h-8 w-48 bg-white/5 rounded-lg" />
+        <div className="h-4 w-32 bg-white/5 rounded-lg" />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="h-36 bg-[#1a1a2e] border border-white/5 rounded-2xl p-6" />
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="h-[360px] bg-[#1a1a2e] border border-white/5 rounded-2xl p-6" />
+        <div className="h-[360px] bg-[#1a1a2e] border border-white/5 rounded-2xl p-6" />
+      </div>
+
+      <div className="h-[360px] bg-[#1a1a2e] border border-white/5 rounded-2xl p-6" />
+    </div>
+  );
+}
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function CustomTooltipVentas({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null;
+  if (!active || !payload?.length || !payload[0]) return null;
   const formatCOP = (v: number) =>
     new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(v);
   return (
     <div className="bg-[#1a1a2e] border border-white/10 rounded-xl px-4 py-3 shadow-2xl">
       <p className="text-xs text-slate-400 mb-1">{label}</p>
-      <p className="text-sm font-bold text-[#e8b86d]">{formatCOP(payload[0].value)}</p>
+      <p className="text-sm font-bold text-[#e8b86d]">{formatCOP(payload[0]?.value ?? 0)}</p>
     </div>
   );
 }
 
 function CustomTooltipPie({ active, payload }: any) {
-  if (!active || !payload?.length) return null;
+  if (!active || !payload?.length || !payload[0]) return null;
+  const name = payload[0]?.name ?? '';
+  const value = payload[0]?.value ?? 0;
   return (
     <div className="bg-[#1a1a2e] border border-white/10 rounded-xl px-4 py-3 shadow-2xl">
       <p className="text-sm font-medium text-white">
-        {PIE_LABELS[payload[0].name] || payload[0].name}: <span className="font-bold">{payload[0].value}</span>
+        {PIE_LABELS[name] || name}: <span className="font-bold">{value}</span>
       </p>
     </div>
   );
 }
 
 function CustomTooltipBar({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null;
+  if (!active || !payload?.length || !payload[0]) return null;
   return (
     <div className="bg-[#1a1a2e] border border-white/10 rounded-xl px-4 py-3 shadow-2xl">
       <p className="text-xs text-slate-400 mb-1">{label}</p>
-      <p className="text-sm font-bold text-[#e8b86d]">{payload[0].value} pedidos</p>
+      <p className="text-sm font-bold text-[#e8b86d]">{payload[0]?.value ?? 0} pedidos</p>
     </div>
   );
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 export default function DashboardPage() {
-  const [data, setData] = useState<DashboardData | null>(null);
+  const [data, setData] = useState<DashboardData>(DEFAULT_DATA);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setLoading(true);
+    setError(null);
     fetch('/api/dashboard')
       .then((r) => r.json())
-      .then(setData)
+      .then((resData) => {
+        if (resData && typeof resData === 'object') {
+          setData({
+            totalVentas: resData.totalVentas ?? 0,
+            pedidosMes: resData.pedidosMes ?? 0,
+            pedidosPendientes: resData.pedidosPendientes ?? 0,
+            stockBajo: resData.stockBajo ?? 0,
+            velasBajoPedido: resData.velasBajoPedido ?? 0,
+            ultimosPedidos: Array.isArray(resData.ultimosPedidos) ? resData.ultimosPedidos : [],
+            ventasDiarias: Array.isArray(resData.ventasDiarias) ? resData.ventasDiarias : [],
+            estadosPedidos: Array.isArray(resData.estadosPedidos) ? resData.estadosPedidos : [],
+            despachosPorCiudad: Array.isArray(resData.despachosPorCiudad) ? resData.despachosPorCiudad : [],
+          });
+          if (resData.error) {
+            setError(resData.error);
+          }
+        }
+      })
+      .catch((err) => {
+        console.error('Error fetching dashboard:', err);
+        setError('No se pudieron obtener las métricas del servidor.');
+      })
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-[#e8b86d]" />
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   const formatCOP = (v: number) =>
     new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(v);
 
   const formatShortDate = (dateStr: string) => {
-    const d = new Date(dateStr + 'T00:00:00');
-    return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });
+    if (!dateStr) return '';
+    const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
+    return isNaN(d.getTime())
+      ? dateStr
+      : d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });
   };
 
-  const totalPedidosChart = data?.estadosPedidos?.reduce((s, e) => s + e.cantidad, 0) ?? 0;
+  const ultimosPedidos = data?.ultimosPedidos ?? [];
+  const ventasDiarias = data?.ventasDiarias ?? [];
+  const estadosPedidos = data?.estadosPedidos ?? [];
+  const despachosPorCiudad = data?.despachosPorCiudad ?? [];
+
+  const totalPedidosChart = estadosPedidos.reduce((s, e) => s + (e?.cantidad ?? 0), 0);
 
   return (
     <div>
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white">Dashboard</h1>
-        <p className="text-slate-400 mt-1">Resumen del negocio</p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-white">Dashboard</h1>
+          <p className="text-slate-400 mt-1">Resumen del negocio</p>
+        </div>
       </div>
+
+      {/* Error alert if API had issues */}
+      {error && (
+        <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 flex items-center gap-3 text-sm">
+          <AlertCircle className="w-5 h-5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 mb-8">
@@ -220,7 +297,7 @@ export default function DashboardPage() {
           <p className="text-xs text-slate-500 mb-6">Últimos 30 días (COP)</p>
           <div className="h-[280px]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data?.ventasDiarias ?? []}>
+              <LineChart data={ventasDiarias}>
                 <defs>
                   <linearGradient id="ventasGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#e8b86d" stopOpacity={0.3} />
@@ -258,14 +335,14 @@ export default function DashboardPage() {
 
         {/* Estado de pedidos */}
         <div className="bg-[#1a1a2e] border border-white/5 rounded-2xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-1">Estado de Pedidos</h2>
+          <h2 className="text-lg font-semibold text-[#ffffff] mb-1">Estado de Pedidos</h2>
           <p className="text-xs text-slate-500 mb-6">Distribución últimos 30 días</p>
           <div className="flex items-center gap-6">
             <div className="h-[220px] w-[220px] shrink-0">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={data?.estadosPedidos?.filter((e) => e.cantidad > 0) ?? []}
+                    data={estadosPedidos.filter((e) => (e?.cantidad ?? 0) > 0)}
                     dataKey="cantidad"
                     nameKey="estado"
                     cx="50%"
@@ -275,20 +352,23 @@ export default function DashboardPage() {
                     paddingAngle={3}
                     strokeWidth={0}
                   >
-                    {(data?.estadosPedidos ?? []).filter((e) => e.cantidad > 0).map((entry) => (
-                      <Cell
-                        key={entry.estado}
-                        fill={PIE_COLORS[entry.estado] || '#64748b'}
-                      />
-                    ))}
+                    {estadosPedidos
+                      .filter((e) => (e?.cantidad ?? 0) > 0)
+                      .map((entry) => (
+                        <Cell
+                          key={entry.estado}
+                          fill={PIE_COLORS[entry.estado] || '#64748b'}
+                        />
+                      ))}
                   </Pie>
                   <Tooltip content={<CustomTooltipPie />} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
             <div className="space-y-3 flex-1">
-              {(data?.estadosPedidos ?? []).map((e) => {
-                const pct = totalPedidosChart > 0 ? ((e.cantidad / totalPedidosChart) * 100).toFixed(0) : '0';
+              {estadosPedidos.map((e) => {
+                const cant = e?.cantidad ?? 0;
+                const pct = totalPedidosChart > 0 ? ((cant / totalPedidosChart) * 100).toFixed(0) : '0';
                 return (
                   <div key={e.estado} className="flex items-center gap-3">
                     <div
@@ -298,7 +378,7 @@ export default function DashboardPage() {
                     <span className="text-sm text-slate-300 flex-1">
                       {PIE_LABELS[e.estado] || e.estado}
                     </span>
-                    <span className="text-sm font-semibold text-white">{e.cantidad}</span>
+                    <span className="text-sm font-semibold text-white">{cant}</span>
                     <span className="text-xs text-slate-500 w-10 text-right">{pct}%</span>
                   </div>
                 );
@@ -315,7 +395,7 @@ export default function DashboardPage() {
         <div className="h-[280px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
-              data={data?.despachosPorCiudad ?? []}
+              data={despachosPorCiudad}
               layout="vertical"
               margin={{ left: 10, right: 20, top: 5, bottom: 5 }}
             >
@@ -353,11 +433,14 @@ export default function DashboardPage() {
         </div>
 
         <div className="divide-y divide-white/5">
-          {data?.ultimosPedidos.length === 0 ? (
+          {ultimosPedidos.length === 0 ? (
             <p className="text-center text-slate-500 py-12">No hay pedidos aún</p>
           ) : (
-            data?.ultimosPedidos.map((p) => {
-              const config = estadoEnvioConfig[p.estado_envio] ?? estadoEnvioConfig.PENDING;
+            ultimosPedidos.map((p) => {
+              const config = estadoEnvioConfig[p?.estado_envio] ?? estadoEnvioConfig.PENDING;
+              const nombreCliente = p?.cliente_nombre || 'Cliente';
+              const inicial = nombreCliente.charAt(0).toUpperCase();
+
               return (
                 <div
                   key={p.id}
@@ -365,16 +448,18 @@ export default function DashboardPage() {
                 >
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 rounded-full bg-[#e8b86d]/10 flex items-center justify-center text-[#e8b86d] text-sm font-bold">
-                      {p.cliente_nombre.charAt(0).toUpperCase()}
+                      {inicial}
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-white">{p.cliente_nombre}</p>
+                      <p className="text-sm font-medium text-white">{nombreCliente}</p>
                       <p className="text-xs text-slate-500">
-                        {new Date(p.creado_en).toLocaleDateString('es-CO', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric',
-                        })}
+                        {p?.creado_en
+                          ? new Date(p.creado_en).toLocaleDateString('es-CO', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                            })
+                          : '—'}
                       </p>
                     </div>
                   </div>
@@ -385,7 +470,7 @@ export default function DashboardPage() {
                       {config.label}
                     </span>
                     <span className="text-sm font-semibold text-white">
-                      {formatCOP(p.total_pagado)}
+                      {formatCOP(p?.total_pagado ?? 0)}
                     </span>
                   </div>
                 </div>

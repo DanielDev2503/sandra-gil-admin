@@ -146,7 +146,7 @@ export default function ProductosPage() {
     if (filtroBajoPedido) params.set('esBajoPedido', 'true');
     const r = await fetch(`/api/productos?${params}`);
     const data = await r.json();
-    setProductos(data);
+    setProductos(Array.isArray(data) ? data : []);
     setLoading(false);
   };
 
@@ -387,7 +387,7 @@ export default function ProductosPage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold text-white">Productos</h1>
-          <p className="text-slate-400 mt-1">{productos.length} productos encontrados</p>
+          <p className="text-slate-400 mt-1">{(productos?.length ?? 0)} productos encontrados</p>
         </div>
         <button
           id="btn-nuevo-producto"
@@ -459,7 +459,7 @@ export default function ProductosPage() {
           <div className="flex items-center justify-center h-48">
             <Loader2 className="w-7 h-7 animate-spin text-[#e8b86d]" />
           </div>
-        ) : productos.length === 0 ? (
+        ) : (productos?.length ?? 0) === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 gap-3 text-slate-500">
             <Package className="w-10 h-10" />
             <p>No hay productos que mostrar</p>

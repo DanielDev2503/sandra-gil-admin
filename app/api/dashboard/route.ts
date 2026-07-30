@@ -132,6 +132,20 @@ export async function GET() {
     });
   } catch (error) {
     console.error('Dashboard error:', error);
-    return NextResponse.json({ error: 'Error al cargar métricas' }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: 'Error al cargar métricas',
+        totalVentas: 0,
+        pedidosMes: 0,
+        pedidosPendientes: 0,
+        stockBajo: 0,
+        velasBajoPedido: 0,
+        ultimosPedidos: [],
+        ventasDiarias: [],
+        estadosPedidos: [],
+        despachosPorCiudad: [],
+      },
+      { status: 500 }
+    );
   }
 }
