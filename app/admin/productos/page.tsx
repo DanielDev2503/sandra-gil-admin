@@ -79,8 +79,24 @@ const EMPTY_FORM: ProductoForm = {
 
 const SLOT_LABELS = ['Principal', 'Secundaria 1', 'Secundaria 2'] as const;
 
-const AROMAS = ['Lavanda', 'Cítricos', 'Rosas', 'Jazmín', 'Canela', 'Vainilla', 'Floral', 'Sándalo', 'Eucalipto'];
-const MATERIALES = ['Cera de Soya', 'Cera de Abeja', 'Parafina', 'Blend Artesanal'];
+const DEFAULT_AROMAS = [
+  'Lavanda & Manzanilla',
+  'Cítricos & Caléndula',
+  'Jazmín Imperial',
+  'Rosas Silvestres',
+  'Vainilla Dulce',
+  'Canela & Manzana',
+  'Eucalipto & Menta',
+];
+
+const DEFAULT_MATERIALES = [
+  '100% Cera de Soya',
+  'Cera de Abeja',
+  'Mezcla Botánica',
+  'Cera de Coco',
+  'Flores Preservadas',
+  'Cristales & Cuarzos',
+];
 
 /* ─── AI Types ─── */
 
@@ -101,6 +117,67 @@ export default function ProductosPage() {
   const [productos, setProductos] = useState<Producto[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  // Dynamic Aromas & Materiales
+  const [aromas, setAromas] = useState<string[]>(DEFAULT_AROMAS);
+  const [materiales, setMateriales] = useState<string[]>(DEFAULT_MATERIALES);
+  const [gestionOpen, setGestionOpen] = useState(false);
+  const [nuevoAromaText, setNuevoAromaText] = useState('');
+  const [nuevoMaterialText, setNuevoMaterialText] = useState('');
+  const [editingAromaIdx, setEditingAromaIdx] = useState<number | null>(null);
+  const [editingAromaVal, setEditingAromaVal] = useState('');
+  const [editingMaterialIdx, setEditingMaterialIdx] = useState<number | null>(null);
+  const [editingMaterialVal, setEditingMaterialVal] = useState('');
+
+  const handleAddAroma = () => {
+    const val = nuevoAromaText.trim();
+    if (val && !aromas.includes(val)) {
+      setAromas((prev) => [...prev, val]);
+      setNuevoAromaText('');
+    }
+  };
+
+  const handleEditAroma = (idx: number) => {
+    const val = editingAromaVal.trim();
+    if (val) {
+      setAromas((prev) => {
+        const next = [...prev];
+        next[idx] = val;
+        return next;
+      });
+      setEditingAromaIdx(null);
+      setEditingAromaVal('');
+    }
+  };
+
+  const handleDeleteAroma = (idx: number) => {
+    setAromas((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleAddMaterial = () => {
+    const val = nuevoMaterialText.trim();
+    if (val && !materiales.includes(val)) {
+      setMateriales((prev) => [...prev, val]);
+      setNuevoMaterialText('');
+    }
+  };
+
+  const handleEditMaterial = (idx: number) => {
+    const val = editingMaterialVal.trim();
+    if (val) {
+      setMateriales((prev) => {
+        const next = [...prev];
+        next[idx] = val;
+        return next;
+      });
+      setEditingMaterialIdx(null);
+      setEditingMaterialVal('');
+    }
+  };
+
+  const handleDeleteMaterial = (idx: number) => {
+    setMateriales((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   const [filtroActivo, setFiltroActivo] = useState<string>('');
   const [filtroAroma, setFiltroAroma] = useState('');
   const [filtroMaterial, setFiltroMaterial] = useState('');
@@ -389,14 +466,23 @@ export default function ProductosPage() {
           <h1 className="text-3xl font-bold text-white">Productos</h1>
           <p className="text-slate-400 mt-1">{(productos?.length ?? 0)} productos encontrados</p>
         </div>
-        <button
-          id="btn-nuevo-producto"
-          onClick={openCreate}
-          className="flex items-center gap-2 bg-[#e8b86d] hover:bg-[#d4a85a] text-[#1a1a2e] font-semibold px-5 py-3 rounded-xl transition-all duration-200 active:scale-95 shadow-lg shadow-[#e8b86d]/20"
-        >
-          <Plus className="w-5 h-5" />
-          Nuevo Producto
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setGestionOpen(true)}
+            className="flex items-center gap-2 bg-[#1a1a2e] hover:bg-white/5 text-slate-300 border border-white/10 font-semibold px-4 py-3 rounded-xl transition-all duration-200 text-sm"
+          >
+            <Sparkles className="w-4 h-4 text-[#e8b86d]" />
+            Gestionar Aromas y Materiales
+          </button>
+          <button
+            id="btn-nuevo-producto"
+            onClick={openCreate}
+            className="flex items-center gap-2 bg-[#e8b86d] hover:bg-[#d4a85a] text-[#1a1a2e] font-semibold px-5 py-3 rounded-xl transition-all duration-200 active:scale-95 shadow-lg shadow-[#e8b86d]/20"
+          >
+            <Plus className="w-5 h-5" />
+            Nuevo Producto
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -426,7 +512,7 @@ export default function ProductosPage() {
           className="bg-[#1a1a2e] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all"
         >
           <option value="">Todos los aromas</option>
-          {AROMAS.map((a) => (
+          {aromas.map((a) => (
             <option key={a} value={a}>{a}</option>
           ))}
         </select>
@@ -436,7 +522,7 @@ export default function ProductosPage() {
           className="bg-[#1a1a2e] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all"
         >
           <option value="">Todos los materiales</option>
-          {MATERIALES.map((m) => (
+          {materiales.map((m) => (
             <option key={m} value={m}>{m}</option>
           ))}
         </select>
@@ -753,14 +839,36 @@ export default function ProductosPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Aroma *</label>
-                  <input required value={form.aroma} onChange={(e) => setForm((f) => ({ ...f, aroma: e.target.value }))}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all" />
+                  <select
+                    required
+                    value={form.aroma}
+                    onChange={(e) => setForm((f) => ({ ...f, aroma: e.target.value }))}
+                    className="w-full bg-[#1a1a2e] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all"
+                  >
+                    <option value="">Seleccionar aroma...</option>
+                    {aromas.map((a) => (
+                      <option key={a} value={a}>{a}</option>
+                    ))}
+                    {form.aroma && !aromas.includes(form.aroma) && (
+                      <option value={form.aroma}>{form.aroma}</option>
+                    )}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Material</label>
-                  <input value={form.material} onChange={(e) => setForm((f) => ({ ...f, material: e.target.value }))}
-                    placeholder="ej: Cera de Soya"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all" />
+                  <select
+                    value={form.material}
+                    onChange={(e) => setForm((f) => ({ ...f, material: e.target.value }))}
+                    className="w-full bg-[#1a1a2e] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all"
+                  >
+                    <option value="">Seleccionar material...</option>
+                    {materiales.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                    {form.material && !materiales.includes(form.material) && (
+                      <option value={form.material}>{form.material}</option>
+                    )}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Precio (COP) *</label>
@@ -935,6 +1043,158 @@ export default function ProductosPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Modal Gestionar Aromas y Materiales ─── */}
+      {gestionOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1a1a2e] border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6">
+            <div className="flex items-center justify-between pb-4 border-b border-white/5 mb-6">
+              <h2 className="text-xl font-bold text-white">Gestionar Aromas y Materiales</h2>
+              <button onClick={() => setGestionOpen(false)} className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Aromas Section */}
+              <div className="bg-white/3 border border-white/5 rounded-xl p-4 space-y-4">
+                <h3 className="text-md font-semibold text-[#e8b86d]">Aromas ({aromas.length})</h3>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Nuevo aroma..."
+                    value={nuevoAromaText}
+                    onChange={(e) => setNuevoAromaText(e.target.value)}
+                    className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[#e8b86d]"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddAroma}
+                    className="px-3 py-2 bg-[#e8b86d] text-[#1a1a2e] font-semibold text-xs rounded-lg hover:bg-[#d4a85a]"
+                  >
+                    Agregar
+                  </button>
+                </div>
+
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                  {aromas.map((aroma, idx) => (
+                    <div key={idx} className="flex items-center justify-between bg-white/5 px-3 py-2 rounded-lg text-sm text-white">
+                      {editingAromaIdx === idx ? (
+                        <div className="flex items-center gap-2 flex-1 mr-2">
+                          <input
+                            type="text"
+                            value={editingAromaVal}
+                            onChange={(e) => setEditingAromaVal(e.target.value)}
+                            className="flex-1 bg-black/40 border border-white/20 rounded px-2 py-1 text-xs text-white"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleEditAroma(idx)}
+                            className="text-xs text-green-400 font-semibold px-2 py-1 bg-green-500/10 rounded"
+                          >
+                            OK
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="flex-1 text-slate-200">{aroma}</span>
+                      )}
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingAromaIdx(idx);
+                            setEditingAromaVal(aroma);
+                          }}
+                          className="p-1 text-slate-400 hover:text-[#e8b86d]"
+                          title="Editar"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteAroma(idx)}
+                          className="p-1 text-slate-400 hover:text-red-400"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Materiales Section */}
+              <div className="bg-white/3 border border-white/5 rounded-xl p-4 space-y-4">
+                <h3 className="text-md font-semibold text-[#e8b86d]">Materiales ({materiales.length})</h3>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Nuevo material..."
+                    value={nuevoMaterialText}
+                    onChange={(e) => setNuevoMaterialText(e.target.value)}
+                    className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[#e8b86d]"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddMaterial}
+                    className="px-3 py-2 bg-[#e8b86d] text-[#1a1a2e] font-semibold text-xs rounded-lg hover:bg-[#d4a85a]"
+                  >
+                    Agregar
+                  </button>
+                </div>
+
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                  {materiales.map((mat, idx) => (
+                    <div key={idx} className="flex items-center justify-between bg-white/5 px-3 py-2 rounded-lg text-sm text-white">
+                      {editingMaterialIdx === idx ? (
+                        <div className="flex items-center gap-2 flex-1 mr-2">
+                          <input
+                            type="text"
+                            value={editingMaterialVal}
+                            onChange={(e) => setEditingMaterialVal(e.target.value)}
+                            className="flex-1 bg-black/40 border border-white/20 rounded px-2 py-1 text-xs text-white"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleEditMaterial(idx)}
+                            className="text-xs text-green-400 font-semibold px-2 py-1 bg-green-500/10 rounded"
+                          >
+                            OK
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="flex-1 text-slate-200">{mat}</span>
+                      )}
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingMaterialIdx(idx);
+                            setEditingMaterialVal(mat);
+                          }}
+                          className="p-1 text-slate-400 hover:text-[#e8b86d]"
+                          title="Editar"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteMaterial(idx)}
+                          className="p-1 text-slate-400 hover:text-red-400"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

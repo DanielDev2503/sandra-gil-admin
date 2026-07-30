@@ -13,6 +13,9 @@ import {
   Truck,
   MapPin,
   MessageCircle,
+  Calendar,
+  CreditCard,
+  AlertCircle,
 } from 'lucide-react';
 
 interface ItemPedido {
@@ -33,18 +36,33 @@ interface Pedido {
   estado_pago: string;
   estado_envio: string;
   numero_guia: string | null;
+  transportadora?: string | null;
+  referencia_wompi?: string | null;
   notas_admin: string | null;
   creado_en: string;
   items: ItemPedido[];
 }
 
 const ESTADOS_ENVIO = [
-  { value: '', label: 'Todos', color: 'text-slate-300' },
-  { value: 'PENDING', label: 'Pendiente', color: 'text-yellow-400' },
-  { value: 'APPROVED', label: 'Aprobado', color: 'text-blue-400' },
-  { value: 'SHIPPED', label: 'Enviado', color: 'text-purple-400' },
-  { value: 'DELIVERED', label: 'Entregado', color: 'text-green-400' },
-  { value: 'DECLINED', label: 'Cancelado', color: 'text-red-400' },
+  { value: '', label: 'Todos los envíos', color: 'text-slate-300' },
+  { value: 'PENDING', label: 'Pendiente (PENDING)', color: 'text-yellow-400' },
+  { value: 'SHIPPED', label: 'Enviado (SHIPPED)', color: 'text-purple-400' },
+  { value: 'DELIVERED', label: 'Entregado (DELIVERED)', color: 'text-green-400' },
+];
+
+const ESTADOS_PAGO = [
+  { value: '', label: 'Todos los pagos' },
+  { value: 'APPROVED', label: 'APPROVED' },
+  { value: 'PENDING', label: 'PENDING' },
+  { value: 'DECLINED', label: 'DECLINED' },
+  { value: 'VOIDED', label: 'VOIDED' },
+];
+
+const RANGOS_FECHA = [
+  { value: '', label: 'Cualquier fecha' },
+  { value: 'hoy', label: 'Hoy' },
+  { value: '7dias', label: 'Últimos 7 días' },
+  { value: 'mes', label: 'Este mes' },
 ];
 
 const CIUDADES = [
@@ -68,9 +86,13 @@ const estadoBadge: Record<string, string> = {
 };
 
 const estadoPagoBadge: Record<string, string> = {
+  PENDING: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
   pendiente: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
+  APPROVED: 'bg-green-500/10 text-green-400 border-green-500/20',
   pagado: 'bg-green-500/10 text-green-400 border-green-500/20',
+  DECLINED: 'bg-red-500/10 text-red-400 border-red-500/20',
   fallido: 'bg-red-500/10 text-red-400 border-red-500/20',
+  VOIDED: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
 };
 
 export default function OrdenesPage() {
@@ -79,12 +101,17 @@ export default function OrdenesPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
+
+  // Advanced Filters
+  const [filtroEstadoPago, setFiltroEstadoPago] = useState('');
   const [filtroEstadoEnvio, setFiltroEstadoEnvio] = useState('');
+  const [filtroRangoFecha, setFiltroRangoFecha] = useState('');
   const [filtroCiudad, setFiltroCiudad] = useState('');
 
   const [selectedPedido, setSelectedPedido] = useState<Pedido | null>(null);
   const [editEstado, setEditEstado] = useState('');
   const [editGuia, setEditGuia] = useState('');
+  const [editTransportadora, setEditTransportadora] = useState('');
   const [editNotas, setEditNotas] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -92,6 +119,7 @@ export default function OrdenesPage() {
     setLoading(true);
     const params = new URLSearchParams({ page: String(page) });
     if (filtroEstadoEnvio) params.set('estado_envio', filtroEstadoEnvio);
+    if (filtroEstadoPago) params.set('estado_pago', filtroEstadoPago);
     if (filtroCiudad) params.set('ciudad', filtroCiudad);
     const r = await fetch(`/api/ordenes?${params}`);
     const data = await r.json();
@@ -104,12 +132,13 @@ export default function OrdenesPage() {
   useEffect(() => {
     fetchPedidos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtroEstadoEnvio, filtroCiudad, page]);
+  }, [filtroEstadoEnvio, filtroEstadoPago, filtroCiudad, page]);
 
   const openModal = (p: Pedido) => {
     setSelectedPedido(p);
     setEditEstado(p.estado_envio);
     setEditGuia(p.numero_guia ?? '');
+    setEditTransportadora(p.transportadora ?? '');
     setEditNotas(p.notas_admin ?? '');
   };
 
@@ -119,7 +148,12 @@ export default function OrdenesPage() {
     await fetch(`/api/ordenes/${selectedPedido.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ estado_envio: editEstado, numero_guia: editGuia, notas_admin: editNotas }),
+      body: JSON.stringify({
+        estado_envio: editEstado,
+        numero_guia: editGuia,
+        transportadora: editTransportadora,
+        notas_admin: editNotas,
+      }),
     });
     setSaving(false);
     setSelectedPedido(null);
@@ -128,27 +162,52 @@ export default function OrdenesPage() {
 
   const handleWhatsApp = () => {
     if (!selectedPedido) return;
-    const phone = selectedPedido.cliente_telefono.replace(/\D/g, '');
-    const phoneFormatted = phone.startsWith('57') ? phone : `57${phone}`;
+    const rawPhone = selectedPedido.cliente_telefono.replace(/\D/g, '');
+    const phoneFormatted = rawPhone.startsWith('57') ? rawPhone.slice(2) : rawPhone;
+    const nombreCliente = selectedPedido.cliente_nombre || '';
+    const referenciaWompi = (selectedPedido as any).referencia_wompi || (selectedPedido as any).referenciaWompi || selectedPedido.id;
+    const transportadora = editTransportadora || selectedPedido.transportadora || 'la transportadora';
+    const numeroGuia = editGuia || selectedPedido.numero_guia || '';
 
-    const guiaText = editGuia ? `📦 Guía: ${editGuia}` : '📦 Guía: Pendiente de asignación';
-    const estadoLabel = ESTADOS_ENVIO.find((e) => e.value === editEstado)?.label ?? editEstado;
+    const messageText = `Hola ${nombreCliente}. Tu pedido de Sandra Gil - Velas con referencia ${referenciaWompi} ha sido despachado por la transportadora ${transportadora}. Tu numero de guia es: ${numeroGuia}.`;
 
-    const message = encodeURIComponent(
-      `¡Hola ${selectedPedido.cliente_nombre}! 🕯️\n\n` +
-      `Tu pedido de *Sandra Gil Velas* ha sido actualizado:\n\n` +
-      `📋 Estado: *${estadoLabel}*\n` +
-      `${guiaText}\n` +
-      `💰 Total: ${formatCOP(selectedPedido.total_pagado)}\n` +
-      `📍 Envío a: ${selectedPedido.ciudad}\n\n` +
-      `¡Gracias por tu compra! ✨`
-    );
-
-    window.open(`https://wa.me/${phoneFormatted}?text=${message}`, '_blank');
+    const url = `https://wa.me/57${phoneFormatted}?text=${encodeURIComponent(messageText)}`;
+    window.open(url, '_blank');
   };
 
   const formatCOP = (v: number) =>
     new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(v);
+
+  // Client-side filtering logic
+  const pedidosFiltrados = (pedidos ?? []).filter((p) => {
+    if (filtroEstadoPago) {
+      const epUpper = (p.estado_pago || '').toUpperCase();
+      if (filtroEstadoPago === 'APPROVED' && epUpper !== 'APPROVED' && epUpper !== 'PAGADO') return false;
+      if (filtroEstadoPago === 'PENDING' && epUpper !== 'PENDING' && epUpper !== 'PENDIENTE') return false;
+      if (filtroEstadoPago === 'DECLINED' && epUpper !== 'DECLINED' && epUpper !== 'FALLIDO') return false;
+      if (filtroEstadoPago === 'VOIDED' && epUpper !== 'VOIDED' && epUpper !== 'ANULADO') return false;
+    }
+    if (filtroEstadoEnvio && p.estado_envio !== filtroEstadoEnvio) {
+      return false;
+    }
+    if (filtroRangoFecha) {
+      const fecha = new Date(p.creado_en);
+      const now = new Date();
+      if (filtroRangoFecha === 'hoy') {
+        if (fecha.toDateString() !== now.toDateString()) return false;
+      } else if (filtroRangoFecha === '7dias') {
+        const diffDays = (now.getTime() - fecha.getTime()) / (1000 * 3600 * 24);
+        if (diffDays > 7) return false;
+      } else if (filtroRangoFecha === 'mes') {
+        if (fecha.getMonth() !== now.getMonth() || fecha.getFullYear() !== now.getFullYear()) return false;
+      }
+    }
+    return true;
+  });
+
+  const isSelectedPagoApproved = selectedPedido
+    ? (selectedPedido.estado_pago?.toUpperCase() === 'APPROVED' || selectedPedido.estado_pago?.toLowerCase() === 'pagado')
+    : false;
 
   return (
     <div>
@@ -160,32 +219,63 @@ export default function OrdenesPage() {
         </div>
       </div>
 
-      {/* Filters row */}
-      <div className="flex flex-wrap items-center gap-4 mb-6">
-        {/* Estado tabs */}
-        <div className="flex items-center gap-1 bg-[#1a1a2e] border border-white/5 p-1.5 rounded-xl w-fit flex-wrap">
-          <Filter className="w-4 h-4 text-slate-500 ml-2 mr-1" />
-          {ESTADOS_ENVIO.map((e) => (
-            <button
-              key={e.value}
-              onClick={() => { setFiltroEstadoEnvio(e.value); setPage(1); }}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${filtroEstadoEnvio === e.value
-                ? 'bg-[#e8b86d] text-[#1a1a2e]'
-                : 'text-slate-400 hover:text-white hover:bg-white/5'
-                }`}
-            >
-              {e.label}
-            </button>
-          ))}
+      {/* Advanced Filters Bar */}
+      <div className="flex flex-wrap items-center gap-3 mb-6 bg-[#1a1a2e] border border-white/5 p-4 rounded-2xl">
+        {/* Filter 1: Estado del Pago */}
+        <div className="flex items-center gap-2">
+          <CreditCard className="w-4 h-4 text-slate-500" />
+          <select
+            value={filtroEstadoPago}
+            onChange={(e) => { setFiltroEstadoPago(e.target.value); setPage(1); }}
+            className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all"
+          >
+            {ESTADOS_PAGO.map((ep) => (
+              <option key={ep.value} value={ep.value} className="bg-slate-800 text-white">
+                {ep.label}
+              </option>
+            ))}
+          </select>
         </div>
 
-        {/* Ciudad filter */}
+        {/* Filter 2: Estado del Envío */}
+        <div className="flex items-center gap-2">
+          <Filter className="w-4 h-4 text-slate-500" />
+          <select
+            value={filtroEstadoEnvio}
+            onChange={(e) => { setFiltroEstadoEnvio(e.target.value); setPage(1); }}
+            className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all"
+          >
+            {ESTADOS_ENVIO.map((ee) => (
+              <option key={ee.value} value={ee.value} className="bg-slate-800 text-white">
+                {ee.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Filter 3: Rango de Fechas */}
+        <div className="flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-slate-500" />
+          <select
+            value={filtroRangoFecha}
+            onChange={(e) => { setFiltroRangoFecha(e.target.value); setPage(1); }}
+            className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all"
+          >
+            {RANGOS_FECHA.map((rf) => (
+              <option key={rf.value} value={rf.value} className="bg-slate-800 text-white">
+                {rf.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Filter 4: Ciudad */}
         <div className="flex items-center gap-2">
           <MapPin className="w-4 h-4 text-slate-500" />
           <select
             value={filtroCiudad}
             onChange={(e) => { setFiltroCiudad(e.target.value); setPage(1); }}
-            className="bg-[#1a1a2e] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all"
+            className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all"
           >
             {CIUDADES.map((c) => (
               <option key={c.value} value={c.value} className="bg-slate-800 text-white">
@@ -202,7 +292,7 @@ export default function OrdenesPage() {
           <div className="flex items-center justify-center h-48">
             <Loader2 className="w-7 h-7 animate-spin text-[#e8b86d]" />
           </div>
-        ) : pedidos.length === 0 ? (
+        ) : pedidosFiltrados.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 gap-3 text-slate-500">
             <ShoppingBag className="w-10 h-10" />
             <p>No hay pedidos con este filtro</p>
@@ -223,40 +313,53 @@ export default function OrdenesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {pedidos.map((p) => (
-                    <tr key={p.id} className="hover:bg-white/2 transition-colors">
-                      <td className="px-6 py-4">
-                        <p className="text-sm font-medium text-white">{p.cliente_nombre}</p>
-                        <p className="text-xs text-slate-500">{p.ciudad}</p>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-300">
-                        {new Date(p.creado_en).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      </td>
-                      <td className="px-6 py-4 text-sm font-semibold text-[#e8b86d]">{formatCOP(p.total_pagado)}</td>
-                      <td className="px-6 py-4">
-                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full border ${estadoPagoBadge[p.estado_pago] ?? ''}`}>
-                          {p.estado_pago}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full border ${estadoBadge[p.estado_envio] ?? ''}`}>
-                          {ESTADOS_ENVIO.find((e) => e.value === p.estado_envio)?.label ?? p.estado_envio}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-400">
-                        {p.numero_guia ?? <span className="text-slate-600">—</span>}
-                      </td>
-                      <td className="px-6 py-4">
-                        <button
-                          onClick={() => openModal(p)}
-                          className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-400 hover:text-[#e8b86d] hover:bg-[#e8b86d]/10 rounded-lg transition-all"
-                        >
-                          <Truck className="w-3.5 h-3.5" />
-                          Gestionar
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {pedidosFiltrados.map((p) => {
+                    const isApproved = p.estado_pago?.toUpperCase() === 'APPROVED' || p.estado_pago?.toLowerCase() === 'pagado';
+                    const sinGuiaAlert = isApproved && !p.numero_guia && !(p as any).numeroGuia;
+
+                    return (
+                      <tr key={p.id} className="hover:bg-white/2 transition-colors">
+                        <td className="px-6 py-4">
+                          <p className="text-sm font-medium text-white">{p.cliente_nombre}</p>
+                          <p className="text-xs text-slate-500">{p.ciudad}</p>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-slate-300">
+                          {new Date(p.creado_en).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </td>
+                        <td className="px-6 py-4 text-sm font-semibold text-[#e8b86d]">{formatCOP(p.total_pagado)}</td>
+                        <td className="px-6 py-4">
+                          <span className={`text-xs font-medium px-2.5 py-1 rounded-full border ${estadoPagoBadge[p.estado_pago] ?? 'bg-white/5 text-slate-300 border-white/10'}`}>
+                            {p.estado_pago}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`text-xs font-medium px-2.5 py-1 rounded-full border ${estadoBadge[p.estado_envio] ?? ''}`}>
+                            {ESTADOS_ENVIO.find((e) => e.value === p.estado_envio)?.label ?? p.estado_envio}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-slate-400">
+                          {p.numero_guia ? (
+                            <span>{p.numero_guia}</span>
+                          ) : sinGuiaAlert ? (
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-extrabold bg-red-500/20 text-red-400 border border-red-500/30">
+                              Sin Guía
+                            </span>
+                          ) : (
+                            <span className="text-slate-600">—</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <button
+                            onClick={() => openModal(p)}
+                            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-400 hover:text-[#e8b86d] hover:bg-[#e8b86d]/10 rounded-lg transition-all"
+                          >
+                            <Truck className="w-3.5 h-3.5" />
+                            Gestionar
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -324,10 +427,25 @@ export default function OrdenesPage() {
                   <span className="text-slate-300 text-right max-w-[60%]">{selectedPedido.direccion_envio}</span>
                 </div>
                 <div className="flex justify-between pt-1 border-t border-white/5">
+                  <span className="text-slate-400 font-medium">Estado Pago</span>
+                  <span className={`font-semibold ${isSelectedPagoApproved ? 'text-green-400' : 'text-amber-400'}`}>
+                    {selectedPedido.estado_pago}
+                  </span>
+                </div>
+                <div className="flex justify-between pt-1 border-t border-white/5">
                   <span className="text-slate-400 font-medium">Total</span>
                   <span className="text-[#e8b86d] font-semibold">{formatCOP(selectedPedido.total_pagado)}</span>
                 </div>
               </div>
+
+              {!isSelectedPagoApproved && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>
+                    El pago debe estar en estado <strong>APPROVED</strong> para habilitar transportadora, guía y cambios a SHIPPED/DELIVERED.
+                  </span>
+                </div>
+              )}
 
               {/* Items */}
               <div>
@@ -342,20 +460,17 @@ export default function OrdenesPage() {
                 </div>
               </div>
 
-              {/* Estado envío */}
+              {/* Transportadora */}
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Estado de envío</label>
-                <select
-                  value={editEstado}
-                  onChange={(e) => setEditEstado(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all"
-                >
-                  {ESTADOS_ENVIO.filter((e) => e.value !== '').map((e) => (
-                    <option key={e.value} value={e.value} className="bg-slate-800 text-white">
-                      {e.label}
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Transportadora</label>
+                <input
+                  type="text"
+                  disabled={!isSelectedPagoApproved}
+                  value={editTransportadora}
+                  onChange={(e) => setEditTransportadora(e.target.value)}
+                  placeholder="ej: Servientrega, Envía, Interrapidísimo"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                />
               </div>
 
               {/* Número de guía */}
@@ -363,11 +478,38 @@ export default function OrdenesPage() {
                 <label className="block text-sm font-medium text-slate-300 mb-2">Número de guía</label>
                 <input
                   type="text"
+                  disabled={!isSelectedPagoApproved}
                   value={editGuia}
                   onChange={(e) => setEditGuia(e.target.value)}
                   placeholder="ej: TCC-1234567890"
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 />
+              </div>
+
+              {/* Estado envío */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Estado de envío</label>
+                <select
+                  value={editEstado}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (!isSelectedPagoApproved && (val === 'SHIPPED' || val === 'DELIVERED')) {
+                      alert('Solo puedes seleccionar SHIPPED o DELIVERED si el pago está en estado APPROVED.');
+                      return;
+                    }
+                    setEditEstado(val);
+                  }}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all"
+                >
+                  {ESTADOS_ENVIO.filter((e) => e.value !== '').map((e) => {
+                    const restricted = !isSelectedPagoApproved && (e.value === 'SHIPPED' || e.value === 'DELIVERED');
+                    return (
+                      <option key={e.value} value={e.value} disabled={restricted} className="bg-slate-800 text-white disabled:text-slate-600">
+                        {e.label} {restricted ? '🔒 (Requiere APPROVED)' : ''}
+                      </option>
+                    );
+                  })}
+                </select>
               </div>
 
               {/* Notas admin */}
@@ -413,3 +555,4 @@ export default function OrdenesPage() {
     </div>
   );
 }
+

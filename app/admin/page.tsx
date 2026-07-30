@@ -8,10 +8,7 @@ import {
   TrendingUp,
   ShoppingBag,
   Package,
-  AlertTriangle,
   ArrowRight,
-  Loader2,
-  Flame,
   AlertCircle,
 } from 'lucide-react';
 import {
@@ -33,8 +30,8 @@ interface DashboardData {
   totalVentas: number;
   pedidosMes: number;
   pedidosPendientes: number;
-  stockBajo: number;
-  velasBajoPedido: number;
+  stockBajo?: number;
+  velasBajoPedido?: number;
   ultimosPedidos: Array<{
     id: string;
     cliente_nombre: string;
@@ -51,8 +48,6 @@ const DEFAULT_DATA: DashboardData = {
   totalVentas: 0,
   pedidosMes: 0,
   pedidosPendientes: 0,
-  stockBajo: 0,
-  velasBajoPedido: 0,
   ultimosPedidos: [],
   ventasDiarias: [],
   estadosPedidos: [],
@@ -80,6 +75,17 @@ const PIE_LABELS: Record<string, string> = {
   SHIPPED: 'Enviado',
   DELIVERED: 'Entregado',
 };
+
+const PIE_SERIES_COLORS = [
+  '#e8b86d',
+  '#3b82f6',
+  '#10b981',
+  '#f59e0b',
+  '#8b5cf6',
+  '#ec4899',
+  '#06b6d4',
+  '#6366f1',
+];
 
 function StatCard({
   title,
@@ -118,8 +124,8 @@ function DashboardSkeleton() {
         <div className="h-4 w-32 bg-white/5 rounded-lg" />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-        {[...Array(5)].map((_, i) => (
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {[...Array(3)].map((_, i) => (
           <div key={i} className="h-36 bg-[#1a1a2e] border border-white/5 rounded-2xl p-6" />
         ))}
       </div>
@@ -128,8 +134,6 @@ function DashboardSkeleton() {
         <div className="h-[360px] bg-[#1a1a2e] border border-white/5 rounded-2xl p-6" />
         <div className="h-[360px] bg-[#1a1a2e] border border-white/5 rounded-2xl p-6" />
       </div>
-
-      <div className="h-[360px] bg-[#1a1a2e] border border-white/5 rounded-2xl p-6" />
     </div>
   );
 }
@@ -160,6 +164,19 @@ function CustomTooltipPie({ active, payload }: any) {
   );
 }
 
+function CustomTooltipPieChart({ active, payload }: any) {
+  if (!active || !payload?.length || !payload[0]) return null;
+  const name = payload[0]?.name ?? '';
+  const value = payload[0]?.value ?? 0;
+  return (
+    <div className="bg-[#1a1a2e] border border-white/10 rounded-xl px-4 py-3 shadow-2xl">
+      <p className="text-sm font-medium text-white">
+        {name}: <span className="font-bold text-[#e8b86d]">{value} uds</span>
+      </p>
+    </div>
+  );
+}
+
 function CustomTooltipBar({ active, payload, label }: any) {
   if (!active || !payload?.length || !payload[0]) return null;
   return (
@@ -173,34 +190,72 @@ function CustomTooltipBar({ active, payload, label }: any) {
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData>(DEFAULT_DATA);
+  const [aromasMasVendidos, setAromasMasVendidos] = useState<Array<{ nombre: string; cantidad: number }>>([]);
+  const [materialesMasVendidos, setMaterialesMasVendidos] = useState<Array<{ nombre: string; cantidad: number }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetch('/api/dashboard')
-      .then((r) => r.json())
-      .then((resData) => {
-        if (resData && typeof resData === 'object') {
+
+    Promise.all([
+      fetch('/api/dashboard').then((r) => r.json()).catch(() => ({})),
+      fetch('/api/ordenes?limit=200').then((r) => r.json()).catch(() => ({})),
+    ])
+      .then(([resDashboard, resOrdenes]) => {
+        if (resDashboard && typeof resDashboard === 'object') {
           setData({
-            totalVentas: resData.totalVentas ?? 0,
-            pedidosMes: resData.pedidosMes ?? 0,
-            pedidosPendientes: resData.pedidosPendientes ?? 0,
-            stockBajo: resData.stockBajo ?? 0,
-            velasBajoPedido: resData.velasBajoPedido ?? 0,
-            ultimosPedidos: Array.isArray(resData.ultimosPedidos) ? resData.ultimosPedidos : [],
-            ventasDiarias: Array.isArray(resData.ventasDiarias) ? resData.ventasDiarias : [],
-            estadosPedidos: Array.isArray(resData.estadosPedidos) ? resData.estadosPedidos : [],
-            despachosPorCiudad: Array.isArray(resData.despachosPorCiudad) ? resData.despachosPorCiudad : [],
+            totalVentas: resDashboard?.totalVentas ?? 0,
+            pedidosMes: resDashboard?.pedidosMes ?? 0,
+            pedidosPendientes: resDashboard?.pedidosPendientes ?? 0,
+            ultimosPedidos: Array.isArray(resDashboard?.ultimosPedidos) ? resDashboard.ultimosPedidos : [],
+            ventasDiarias: Array.isArray(resDashboard?.ventasDiarias) ? resDashboard.ventasDiarias : [],
+            estadosPedidos: Array.isArray(resDashboard?.estadosPedidos) ? resDashboard.estadosPedidos : [],
+            despachosPorCiudad: Array.isArray(resDashboard?.despachosPorCiudad) ? resDashboard.despachosPorCiudad : [],
           });
-          if (resData.error) {
-            setError(resData.error);
+          if (resDashboard?.error) {
+            setError(resDashboard.error);
           }
         }
+
+        // Aggregate Aromas & Materiales from items in APPROVED orders
+        const ordenesList = resOrdenes?.pedidos ?? resDashboard?.ordenes ?? [];
+        const aromasCount: Record<string, number> = {};
+        const materialesCount: Record<string, number> = {};
+
+        if (Array.isArray(ordenesList)) {
+          /* eslint-disable @typescript-eslint/no-explicit-any */
+          const approvedOrders = ordenesList.filter(
+            (o: any) => o?.estado_pago?.toUpperCase() === 'APPROVED' || o?.estado_pago?.toLowerCase() === 'pagado'
+          );
+
+          approvedOrders.forEach((o: any) => {
+            (o?.items ?? []).forEach((item: any) => {
+              const aroma = item?.producto?.aroma || item?.aroma || 'Sin Aroma';
+              const material = item?.producto?.material || item?.material || '100% Cera de Soya';
+              const qty = item?.cantidad ?? 1;
+
+              aromasCount[aroma] = (aromasCount[aroma] ?? 0) + qty;
+              materialesCount[material] = (materialesCount[material] ?? 0) + qty;
+            });
+          });
+          /* eslint-enable @typescript-eslint/no-explicit-any */
+        }
+
+        const aromasArr = Object.entries(aromasCount)
+          .map(([nombre, cantidad]) => ({ nombre, cantidad }))
+          .sort((a, b) => b.cantidad - a.cantidad);
+
+        const materialesArr = Object.entries(materialesCount)
+          .map(([nombre, cantidad]) => ({ nombre, cantidad }))
+          .sort((a, b) => b.cantidad - a.cantidad);
+
+        setAromasMasVendidos(aromasArr);
+        setMaterialesMasVendidos(materialesArr);
       })
       .catch((err) => {
-        console.error('Error fetching dashboard:', err);
+        console.error('Error fetching dashboard metrics:', err);
         setError('No se pudieron obtener las métricas del servidor.');
       })
       .finally(() => setLoading(false));
@@ -226,7 +281,7 @@ export default function DashboardPage() {
   const estadosPedidos = data?.estadosPedidos ?? [];
   const despachosPorCiudad = data?.despachosPorCiudad ?? [];
 
-  const totalPedidosChart = estadosPedidos.reduce((s, e) => s + (e?.cantidad ?? 0), 0);
+  const totalPedidosChart = (estadosPedidos ?? []).reduce((s, e) => s + (e?.cantidad ?? 0), 0);
 
   return (
     <div>
@@ -246,8 +301,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 mb-8">
+      {/* Stats Grid - 3 cards (Velas Bajo Pedido and Stock Alert removed) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         <StatCard
           title="Ventas totales"
           value={formatCOP(data?.totalVentas ?? 0)}
@@ -269,27 +324,9 @@ export default function DashboardPage() {
           icon={Package}
           accent="bg-purple-500/10 text-purple-400"
         />
-        <StatCard
-          title="Velas Bajo Pedido"
-          value={String(data?.velasBajoPedido ?? 0)}
-          subtitle="Pendientes de fabricación"
-          icon={Flame}
-          accent="bg-orange-500/10 text-orange-400"
-        />
-        <StatCard
-          title="Alertas de stock"
-          value={String(data?.stockBajo ?? 0)}
-          subtitle="Productos con menos de 5 uds"
-          icon={AlertTriangle}
-          accent={
-            (data?.stockBajo ?? 0) > 0
-              ? 'bg-red-500/10 text-red-400'
-              : 'bg-green-500/10 text-green-400'
-          }
-        />
       </div>
 
-      {/* Charts Row */}
+      {/* Charts Row 1: Ventas Diarias & Estado de Pedidos */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
         {/* Ventas por día */}
         <div className="bg-[#1a1a2e] border border-white/5 rounded-2xl p-6">
@@ -335,14 +372,14 @@ export default function DashboardPage() {
 
         {/* Estado de pedidos */}
         <div className="bg-[#1a1a2e] border border-white/5 rounded-2xl p-6">
-          <h2 className="text-lg font-semibold text-[#ffffff] mb-1">Estado de Pedidos</h2>
+          <h2 className="text-lg font-semibold text-white mb-1">Estado de Pedidos</h2>
           <p className="text-xs text-slate-500 mb-6">Distribución últimos 30 días</p>
           <div className="flex items-center gap-6">
             <div className="h-[220px] w-[220px] shrink-0">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={estadosPedidos.filter((e) => (e?.cantidad ?? 0) > 0)}
+                    data={(estadosPedidos ?? []).filter((e) => (e?.cantidad ?? 0) > 0)}
                     dataKey="cantidad"
                     nameKey="estado"
                     cx="50%"
@@ -352,7 +389,7 @@ export default function DashboardPage() {
                     paddingAngle={3}
                     strokeWidth={0}
                   >
-                    {estadosPedidos
+                    {(estadosPedidos ?? [])
                       .filter((e) => (e?.cantidad ?? 0) > 0)
                       .map((entry) => (
                         <Cell
@@ -366,7 +403,7 @@ export default function DashboardPage() {
               </ResponsiveContainer>
             </div>
             <div className="space-y-3 flex-1">
-              {estadosPedidos.map((e) => {
+              {(estadosPedidos ?? []).map((e) => {
                 const cant = e?.cantidad ?? 0;
                 const pct = totalPedidosChart > 0 ? ((cant / totalPedidosChart) * 100).toFixed(0) : '0';
                 return (
@@ -383,6 +420,109 @@ export default function DashboardPage() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Charts Row 2: Aromas & Materiales Más Vendidos Pie Charts */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+        {/* Aromas Más Vendidos */}
+        <div className="bg-[#1a1a2e] border border-white/5 rounded-2xl p-6">
+          <h2 className="text-lg font-semibold text-white mb-1">Aromas Más Vendidos</h2>
+          <p className="text-xs text-slate-500 mb-6">Proporción de órdenes en estado APPROVED</p>
+          <div className="flex items-center gap-6">
+            <div className="h-[220px] w-[220px] shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={aromasMasVendidos}
+                    dataKey="cantidad"
+                    nameKey="nombre"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={55}
+                    outerRadius={90}
+                    paddingAngle={3}
+                    strokeWidth={0}
+                  >
+                    {(aromasMasVendidos ?? []).map((_, idx) => (
+                      <Cell key={idx} fill={PIE_SERIES_COLORS[idx % PIE_SERIES_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomTooltipPieChart />} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="space-y-2 flex-1 max-h-[220px] overflow-y-auto pr-1">
+              {(aromasMasVendidos ?? []).map((item, idx) => {
+                const totalAromas = (aromasMasVendidos ?? []).reduce((acc, curr) => acc + (curr?.cantidad ?? 0), 0);
+                const pct = totalAromas > 0 ? (((item?.cantidad ?? 0) / totalAromas) * 100).toFixed(0) : '0';
+                return (
+                  <div key={item.nombre} className="flex items-center gap-3">
+                    <div
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{ backgroundColor: PIE_SERIES_COLORS[idx % PIE_SERIES_COLORS.length] }}
+                    />
+                    <span className="text-sm text-slate-300 flex-1 truncate">{item.nombre}</span>
+                    <span className="text-sm font-semibold text-white">{item?.cantidad ?? 0}</span>
+                    <span className="text-xs text-slate-500 w-10 text-right">{pct}%</span>
+                  </div>
+                );
+              })}
+              {(aromasMasVendidos?.length ?? 0) === 0 && (
+                <p className="text-xs text-slate-500 py-4">No hay datos de aromas en órdenes aprobadas</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Materiales Más Vendidos */}
+        <div className="bg-[#1a1a2e] border border-white/5 rounded-2xl p-6">
+          <h2 className="text-lg font-semibold text-white mb-1">Materiales Más Vendidos</h2>
+          <p className="text-xs text-slate-500 mb-6">Proporción de órdenes en estado APPROVED</p>
+          <div className="flex items-center gap-6">
+            <div className="h-[220px] w-[220px] shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={materialesMasVendidos}
+                    dataKey="cantidad"
+                    nameKey="nombre"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={55}
+                    outerRadius={90}
+                    paddingAngle={3}
+                    strokeWidth={0}
+                  >
+                    {(materialesMasVendidos ?? []).map((_, idx) => (
+                      <Cell key={idx} fill={PIE_SERIES_COLORS[idx % PIE_SERIES_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomTooltipPieChart />} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="space-y-2 flex-1 max-h-[220px] overflow-y-auto pr-1">
+              {(materialesMasVendidos ?? []).map((item, idx) => {
+                const totalMat = (materialesMasVendidos ?? []).reduce((acc, curr) => acc + (curr?.cantidad ?? 0), 0);
+                const pct = totalMat > 0 ? (((item?.cantidad ?? 0) / totalMat) * 100).toFixed(0) : '0';
+                return (
+                  <div key={item.nombre} className="flex items-center gap-3">
+                    <div
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{ backgroundColor: PIE_SERIES_COLORS[idx % PIE_SERIES_COLORS.length] }}
+                    />
+                    <span className="text-sm text-slate-300 flex-1 truncate">{item.nombre}</span>
+                    <span className="text-sm font-semibold text-white">{item?.cantidad ?? 0}</span>
+                    <span className="text-xs text-slate-500 w-10 text-right">{pct}%</span>
+                  </div>
+                );
+              })}
+              {(materialesMasVendidos?.length ?? 0) === 0 && (
+                <p className="text-xs text-slate-500 py-4">No hay datos de materiales en órdenes aprobadas</p>
+              )}
             </div>
           </div>
         </div>
@@ -433,10 +573,10 @@ export default function DashboardPage() {
         </div>
 
         <div className="divide-y divide-white/5">
-          {ultimosPedidos.length === 0 ? (
+          {(ultimosPedidos?.length ?? 0) === 0 ? (
             <p className="text-center text-slate-500 py-12">No hay pedidos aún</p>
           ) : (
-            ultimosPedidos.map((p) => {
+            (ultimosPedidos ?? []).map((p) => {
               const config = estadoEnvioConfig[p?.estado_envio] ?? estadoEnvioConfig.PENDING;
               const nombreCliente = p?.cliente_nombre || 'Cliente';
               const inicial = nombreCliente.charAt(0).toUpperCase();
@@ -482,3 +622,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+

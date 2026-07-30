@@ -15,4 +15,5 @@ const nextConfig: NextConfig = {
   },
 };
 
+// Restart dev server to reload Prisma Client schema changes
 export default nextConfig;
