@@ -119,7 +119,16 @@ export default function OrdenesPage() {
     setLoading(true);
     const params = new URLSearchParams({ page: String(page) });
     if (filtroEstadoEnvio) params.set('estado_envio', filtroEstadoEnvio);
-    if (filtroEstadoPago) params.set('estado_pago', filtroEstadoPago);
+    
+    if (filtroEstadoPago) {
+      const mappedPago = 
+        filtroEstadoPago === 'APPROVED' ? 'pagado' :
+        filtroEstadoPago === 'PENDING' ? 'pendiente' :
+        filtroEstadoPago === 'DECLINED' ? 'fallido' :
+        filtroEstadoPago === 'VOIDED' ? 'anulado' : filtroEstadoPago;
+      params.set('estado_pago', mappedPago);
+    }
+    
     if (filtroCiudad) params.set('ciudad', filtroCiudad);
     const r = await fetch(`/api/ordenes?${params}`);
     const data = await r.json();
