@@ -19,7 +19,6 @@ import {
   Camera,
   ImageIcon,
   AlertCircle,
-  Sparkles,
   Flame,
 } from 'lucide-react';
 
@@ -98,14 +97,6 @@ const DEFAULT_MATERIALES = [
   'Cristales & Cuarzos',
 ];
 
-/* ─── AI Types ─── */
-
-interface AIResult {
-  texto: { nombre: string; descripcion: string; aroma: string; material: string };
-  imagenes: string[];
-}
-
-/* ─── Component ─── */
 
 export default function ProductosPage() {
   const fileRefs = [
@@ -191,16 +182,6 @@ export default function ProductosPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  // AI state
-  const [aiPanelOpen, setAiPanelOpen] = useState(false);
-  const [aiDescription, setAiDescription] = useState('');
-  const [aiDraftPhoto, setAiDraftPhoto] = useState<string | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiResult, setAiResult] = useState<AIResult | null>(null);
-  const [aiSelectedImages, setAiSelectedImages] = useState<Set<number>>(new Set());
-  const [aiPrimaryImage, setAiPrimaryImage] = useState<number | null>(null);
-  const aiFileRef = useRef<HTMLInputElement>(null);
-
   /* ─── Toast helpers ─── */
 
   const showToast = useCallback((message: string, type: ToastType = 'success') => {
@@ -237,10 +218,6 @@ export default function ProductosPage() {
   const openCreate = () => {
     setEditingId(null);
     setForm(EMPTY_FORM);
-    setAiPanelOpen(false);
-    setAiResult(null);
-    setAiDescription('');
-    setAiDraftPhoto(null);
     setModalOpen(true);
   };
 
@@ -263,8 +240,6 @@ export default function ProductosPage() {
         imgs[2] || '',
       ],
     });
-    setAiPanelOpen(false);
-    setAiResult(null);
     setModalOpen(true);
   };
 
@@ -302,93 +277,6 @@ export default function ProductosPage() {
       updated[slotIndex] = '';
       return { ...prev, imagenes: updated };
     });
-  };
-
-  /* ─── AI Generation ─── */
-
-  const handleAiGenerate = async () => {
-    if (!aiDescription.trim()) {
-      showToast('Escribe una descripción para generar con IA', 'error');
-      return;
-    }
-    setAiLoading(true);
-    setAiResult(null);
-    setAiSelectedImages(new Set());
-    setAiPrimaryImage(null);
-
-    try {
-      const res = await fetch('/api/ai/generate-product', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          descripcion: aiDescription,
-          foto: aiDraftPhoto,
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        showToast(err?.error ?? 'Error al generar con IA', 'error');
-        setAiLoading(false);
-        return;
-      }
-
-      const result: AIResult = await res.json();
-      setAiResult(result);
-
-      // Auto-select first image as primary
-      if (result.imagenes.length > 0) {
-        setAiPrimaryImage(0);
-        const selected = new Set<number>();
-        result.imagenes.forEach((_, i) => selected.add(i));
-        setAiSelectedImages(selected);
-      }
-    } catch {
-      showToast('Error de conexión al generar con IA', 'error');
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  const handleAiApply = () => {
-    if (!aiResult) return;
-
-    // Apply text
-    setForm((prev) => ({
-      ...prev,
-      nombre: aiResult.texto.nombre || prev.nombre,
-      descripcion: aiResult.texto.descripcion || prev.descripcion,
-      aroma: aiResult.texto.aroma || prev.aroma,
-      material: aiResult.texto.material || prev.material,
-    }));
-
-    // Apply images
-    if (aiResult.imagenes.length > 0 && aiPrimaryImage !== null) {
-      const primaryUrl = aiResult.imagenes[aiPrimaryImage];
-      const secondaryUrls = aiResult.imagenes.filter(
-        (_, i) => i !== aiPrimaryImage && aiSelectedImages.has(i)
-      );
-
-      setForm((prev) => ({
-        ...prev,
-        imagenes: [
-          primaryUrl || prev.imagenes[0],
-          secondaryUrls[0] || prev.imagenes[1],
-          secondaryUrls[1] || prev.imagenes[2],
-        ],
-      }));
-    }
-
-    setAiPanelOpen(false);
-    showToast('Contenido IA aplicado al formulario', 'success');
-  };
-
-  const handleAiDraftFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      setAiDraftPhoto(reader.result as string);
-    };
-    reader.readAsDataURL(file);
   };
 
   /* ─── Save ─── */
@@ -471,7 +359,6 @@ export default function ProductosPage() {
             onClick={() => setGestionOpen(true)}
             className="flex items-center gap-2 bg-[#1a1a2e] hover:bg-white/5 text-slate-300 border border-white/10 font-semibold px-4 py-3 rounded-xl transition-all duration-200 text-sm"
           >
-            <Sparkles className="w-4 h-4 text-[#e8b86d]" />
             Gestionar Aromas y Materiales
           </button>
           <button
@@ -659,176 +546,12 @@ export default function ProductosPage() {
                 {editingId ? 'Editar Producto' : 'Nuevo Producto'}
               </h2>
               <div className="flex items-center gap-2">
-                {!editingId && (
-                  <button
-                    type="button"
-                    onClick={() => setAiPanelOpen(!aiPanelOpen)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-                      aiPanelOpen
-                        ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30'
-                        : 'bg-gradient-to-r from-violet-500/10 to-purple-500/10 text-violet-300 border border-violet-500/20 hover:border-violet-500/40'
-                    }`}
-                  >
-                    <Sparkles className="w-4 h-4" />
-                    Generar con IA
-                  </button>
-                )}
                 <button onClick={() => setModalOpen(false)} className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-all">
                   <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
 
-            {/* AI Panel */}
-            {aiPanelOpen && (
-              <div className="p-6 border-b border-violet-500/10 bg-gradient-to-b from-violet-500/5 to-transparent">
-                <div className="flex items-center gap-2 mb-4">
-                  <Sparkles className="w-5 h-5 text-violet-400" />
-                  <h3 className="text-sm font-bold text-violet-300">Generador IA (Gemini)</h3>
-                </div>
-
-                <div className="space-y-4">
-                  {/* Draft photo upload */}
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-2">
-                      Foto borrador <span className="text-slate-600">(opcional)</span>
-                    </label>
-                    <input
-                      ref={aiFileRef}
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleAiDraftFile(file);
-                      }}
-                    />
-                    {aiDraftPhoto ? (
-                      <div className="relative w-24 h-24 rounded-xl overflow-hidden border border-white/10 group">
-                        <Image src={aiDraftPhoto} alt="Borrador" fill className="object-cover" />
-                        <button
-                          type="button"
-                          onClick={() => setAiDraftPhoto(null)}
-                          className="absolute top-1 right-1 p-1 bg-black/60 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <X className="w-3 h-3 text-white" />
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => aiFileRef.current?.click()}
-                        className="w-24 h-24 rounded-xl border-2 border-dashed border-violet-500/20 hover:border-violet-500/40 flex flex-col items-center justify-center gap-1 transition-all"
-                      >
-                        <Camera className="w-5 h-5 text-violet-400/60" />
-                        <span className="text-[10px] text-slate-500">Subir foto</span>
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Description */}
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-2">
-                      Descripción breve del producto *
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={aiDescription}
-                      onChange={(e) => setAiDescription(e.target.value)}
-                      placeholder="ej: vela artesanal aroma lavanda en vaso de vidrio reciclado, color morado pastel..."
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-violet-500/30 transition-all resize-none"
-                    />
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleAiGenerate}
-                    disabled={aiLoading || !aiDescription.trim()}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-semibold rounded-xl transition-all active:scale-95 disabled:opacity-50 text-sm shadow-lg shadow-violet-500/20"
-                  >
-                    {aiLoading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Generando con Gemini...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-4 h-4" />
-                        Generar
-                      </>
-                    )}
-                  </button>
-
-                  {/* AI Results */}
-                  {aiResult && (
-                    <div className="mt-4 space-y-4">
-                      {/* Generated text preview */}
-                      <div className="bg-white/5 rounded-xl p-4 space-y-2">
-                        <p className="text-xs font-bold text-violet-400 uppercase tracking-wider">Texto generado</p>
-                        <p className="text-sm text-white"><strong>Nombre:</strong> {aiResult.texto.nombre}</p>
-                        <p className="text-xs text-slate-300 line-clamp-3"><strong>Descripción:</strong> {aiResult.texto.descripcion}</p>
-                        <div className="flex gap-4 text-xs text-slate-400">
-                          <span>Aroma: <strong className="text-slate-200">{aiResult.texto.aroma}</strong></span>
-                          <span>Material: <strong className="text-slate-200">{aiResult.texto.material}</strong></span>
-                        </div>
-                      </div>
-
-                      {/* Generated images */}
-                      {aiResult.imagenes.length > 0 && (
-                        <div>
-                          <p className="text-xs font-bold text-violet-400 uppercase tracking-wider mb-3">
-                            Imágenes generadas — Clic para seleccionar principal
-                          </p>
-                          <div className="grid grid-cols-4 gap-3">
-                            {aiResult.imagenes.map((url, i) => (
-                              <button
-                                key={i}
-                                type="button"
-                                onClick={() => {
-                                  setAiPrimaryImage(i);
-                                  setAiSelectedImages((prev) => {
-                                    const next = new Set(prev);
-                                    if (next.has(i) && i !== aiPrimaryImage) {
-                                      next.delete(i);
-                                    } else {
-                                      next.add(i);
-                                    }
-                                    return next;
-                                  });
-                                }}
-                                className={`relative aspect-square rounded-xl overflow-hidden border-2 transition-all ${
-                                  aiPrimaryImage === i
-                                    ? 'border-[#e8b86d] shadow-lg shadow-[#e8b86d]/20'
-                                    : aiSelectedImages.has(i)
-                                    ? 'border-violet-500/50'
-                                    : 'border-white/10 hover:border-white/25'
-                                }`}
-                              >
-                                <Image src={url} alt={`AI ${i + 1}`} fill className="object-cover" />
-                                {aiPrimaryImage === i && (
-                                  <span className="absolute top-1.5 left-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#e8b86d] text-[#1a1a2e]">
-                                    Principal
-                                  </span>
-                                )}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={handleAiApply}
-                        className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-[#e8b86d] hover:bg-[#d4a85a] text-[#1a1a2e] font-semibold rounded-xl transition-all active:scale-95 text-sm"
-                      >
-                        <CheckCircle className="w-4 h-4" />
-                        Aplicar al formulario
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
 
             <form onSubmit={handleSave} className="p-6 space-y-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">

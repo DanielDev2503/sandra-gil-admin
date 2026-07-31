@@ -1,63 +1,28 @@
 import sharp from 'sharp';
-import fs from 'fs';
 import path from 'path';
+import fs from 'fs';
 
-/**
- * Aplica una marca de agua (logo Sandra Gil) sobre el buffer de una imagen.
- * - Redimensiona la marca de agua al ~22% del ancho de la imagen principal.
- * - Ajusta la opacidad al ~40%.
- * - Ubica la marca de agua en la esquina inferior derecha con un margen de seguridad.
- * - Retorna el buffer resultante de la imagen procesada.
- */
-export async function applyWatermark(imageBuffer: Buffer): Promise<Buffer> {
-  const logoPath = path.join(process.cwd(), 'public', 'logo-sandra.png');
-
-  if (!fs.existsSync(logoPath)) {
-    console.warn(`[watermark] Logo no encontrado en ${logoPath}, omitiendo marca de agua.`);
-    return imageBuffer;
-  }
-
+export async function applyWatermark(inputBuffer: Buffer): Promise<Buffer> {
   try {
-    const mainImage = sharp(imageBuffer);
-    const metadata = await mainImage.metadata();
+    const logoPath = path.join(process.cwd(), 'public', 'logo-sandra.png');
+    if (!fs.existsSync(logoPath)) {
+      return inputBuffer;
+    }
 
-    const mainWidth = metadata.width || 800;
-    const mainHeight = metadata.height || 800;
+    const imageMetadata = await sharp(inputBuffer).metadata();
+    const width = imageMetadata.width || 800;
+    const watermarkWidth = Math.round(width * 0.25); // 25% del ancho
 
-    // Ancho de marca de agua: 22% del ancho principal
-    const watermarkWidth = Math.max(80, Math.round(mainWidth * 0.22));
-
-    // Redimensionar logo y aplicar opacidad del 40% (0.4)
     const watermarkBuffer = await sharp(logoPath)
-      .resize({ width: watermarkWidth })
-      .ensureAlpha()
-      .linear([1, 1, 1, 0.4], [0, 0, 0, 0])
+      .resize(watermarkWidth)
+      .ensureAlpha(0.4) // 40% opacidad
       .toBuffer();
 
-    const watermarkMeta = await sharp(watermarkBuffer).metadata();
-    const wWidth = watermarkMeta.width || watermarkWidth;
-    const wHeight = watermarkMeta.height || Math.round(watermarkWidth * 0.4);
-
-    // Margen del 3% desde el borde inferior derecho
-    const margin = Math.max(12, Math.round(mainWidth * 0.03));
-
-    const left = Math.max(0, mainWidth - wWidth - margin);
-    const top = Math.max(0, mainHeight - wHeight - margin);
-
-    // Superponer marca de agua y exportar buffer
-    const resultBuffer = await mainImage
-      .composite([
-        {
-          input: watermarkBuffer,
-          top,
-          left,
-        },
-      ])
+    return await sharp(inputBuffer)
+      .composite([{ input: watermarkBuffer, gravity: 'southeast' }])
       .toBuffer();
-
-    return resultBuffer;
   } catch (error) {
-    console.error('Error aplicando marca de agua:', error);
-    return imageBuffer;
+    console.warn('⚠️ No se pudo aplicar la marca de agua, usando imagen limpia:', error);
+    return inputBuffer;
   }
 }

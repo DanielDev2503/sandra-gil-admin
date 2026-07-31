@@ -5,7 +5,11 @@ import { PrismaPg } from '@prisma/adapter-pg';
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
 const getPrismaInstance = () => {
-  let connectionString = process.env.DATABASE_URL || process.env.POSTGRES_PRISMA_URL;
+  let connectionString =
+    process.env.DIRECT_URL ||
+    process.env.POSTGRES_URL_NON_POOLING ||
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_PRISMA_URL;
 
   if (connectionString && !connectionString.includes('sslmode=')) {
     const separator = connectionString.includes('?') ? '&' : '?';
@@ -27,6 +31,4 @@ const getPrismaInstance = () => {
   });
 };
 
-export const prisma = globalForPrisma.prisma || getPrismaInstance();
-
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+export const prisma = getPrismaInstance();
