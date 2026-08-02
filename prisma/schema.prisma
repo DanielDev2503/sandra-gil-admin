@@ -9,21 +9,46 @@ datasource db {
   provider = "postgresql"
 }
 
+enum TipoProducto {
+  VELA
+  JABON
+}
+
 model Producto {
-  id           String   @id @default(uuid())
+  id           String       @id @default(uuid())
   nombre       String
   descripcion  String
-  aroma        String
+  tipo         TipoProducto @default(VELA)
+  aroma        String?
+  aromaId      String?
   material     String?
-  dimensiones  String
+  materialId   String?
+  dimensiones  String?
   precio       Float
   stock        Int
-  esBajoPedido Boolean  @default(false)
+  esBajoPedido Boolean      @default(false)
   url_imagen   String
-  imagenes     String[] @default([])
-  activo       Boolean  @default(true)
+  imagenes     String[]     @default([])
+  activo       Boolean      @default(true)
   items        ItemPedido[]
 }
+
+model Aroma {
+  id          String   @id @default(uuid())
+  nombre      String   @unique
+  descripcion String?
+  activo      Boolean  @default(true)
+  creado_en   DateTime @default(now())
+}
+
+model Material {
+  id          String   @id @default(uuid())
+  nombre      String   @unique
+  descripcion String?
+  activo      Boolean  @default(true)
+  creado_en   DateTime @default(now())
+}
+
 
 model ConfiguracionIA {
   id              String   @id @default("default")

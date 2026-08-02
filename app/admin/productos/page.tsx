@@ -34,13 +34,16 @@ interface Toast {
 
 /* ─── Types ─── */
 
+type TipoProducto = 'VELA' | 'JABON';
+
 interface Producto {
   id: string;
   nombre: string;
   descripcion: string;
-  aroma: string;
+  tipo: TipoProducto;
+  aroma: string | null;
   material: string | null;
-  dimensiones: string;
+  dimensiones: string | null;
   precio: number;
   stock: number;
   esBajoPedido: boolean;
@@ -52,6 +55,7 @@ interface Producto {
 interface ProductoForm {
   nombre: string;
   descripcion: string;
+  tipo: TipoProducto;
   aroma: string;
   material: string;
   dimensiones: string;
@@ -66,6 +70,7 @@ interface ProductoForm {
 const EMPTY_FORM: ProductoForm = {
   nombre: '',
   descripcion: '',
+  tipo: 'VELA',
   aroma: '',
   material: '',
   dimensiones: '',
@@ -108,9 +113,14 @@ export default function ProductosPage() {
   const [productos, setProductos] = useState<Producto[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  // Dynamic Aromas & Materiales
+  const [filtroTipo, setFiltroTipo] = useState<string>('');
+
+  // Dynamic Aromas & Materiales with API persistence
   const [aromas, setAromas] = useState<string[]>(DEFAULT_AROMAS);
+  const [aromasFull, setAromasFull] = useState<Array<{ id: string; nombre: string }>>([]);
   const [materiales, setMateriales] = useState<string[]>(DEFAULT_MATERIALES);
+  const [materialesFull, setMaterialesFull] = useState<Array<{ id: string; nombre: string }>>([]);
+
   const [gestionOpen, setGestionOpen] = useState(false);
   const [nuevoAromaText, setNuevoAromaText] = useState('');
   const [nuevoMaterialText, setNuevoMaterialText] = useState('');
@@ -119,54 +129,153 @@ export default function ProductosPage() {
   const [editingMaterialIdx, setEditingMaterialIdx] = useState<number | null>(null);
   const [editingMaterialVal, setEditingMaterialVal] = useState('');
 
-  const handleAddAroma = () => {
+  const fetchAromas = async () => {
+    try {
+      const res = await fetch('/api/admin/aromas');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setAromas(data.map((a: { nombre: string }) => a.nombre));
+          setAromasFull(data);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching aromas:', err);
+    }
+  };
+
+  const fetchMateriales = async () => {
+    try {
+      const res = await fetch('/api/admin/materiales');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setMateriales(data.map((m: { nombre: string }) => m.nombre));
+          setMaterialesFull(data);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching materiales:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchAromas();
+    fetchMateriales();
+  }, []);
+
+  const handleAddAroma = async () => {
     const val = nuevoAromaText.trim();
-    if (val && !aromas.includes(val)) {
+    if (!val) return;
+    try {
+      const res = await fetch('/api/admin/aromas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre: val }),
+      });
+      if (res.ok) {
+        setNuevoAromaText('');
+        fetchAromas();
+        showToast('Aroma guardado en la BD');
+      } else {
+        setAromas((prev) => [...prev, val]);
+        setNuevoAromaText('');
+      }
+    } catch {
       setAromas((prev) => [...prev, val]);
       setNuevoAromaText('');
     }
   };
 
-  const handleEditAroma = (idx: number) => {
+  const handleEditAroma = async (idx: number) => {
     const val = editingAromaVal.trim();
-    if (val) {
+    if (!val) return;
+    const oldName = aromas[idx];
+    const item = aromasFull.find((a) => a.nombre === oldName);
+    if (item?.id) {
+      await fetch(`/api/admin/aromas/${item.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre: val }),
+      });
+      fetchAromas();
+    } else {
       setAromas((prev) => {
         const next = [...prev];
         next[idx] = val;
         return next;
       });
-      setEditingAromaIdx(null);
-      setEditingAromaVal('');
+    }
+    setEditingAromaIdx(null);
+    setEditingAromaVal('');
+  };
+
+  const handleDeleteAroma = async (idx: number) => {
+    const oldName = aromas[idx];
+    const item = aromasFull.find((a) => a.nombre === oldName);
+    if (item?.id) {
+      await fetch(`/api/admin/aromas/${item.id}`, { method: 'DELETE' });
+      fetchAromas();
+    } else {
+      setAromas((prev) => prev.filter((_, i) => i !== idx));
     }
   };
 
-  const handleDeleteAroma = (idx: number) => {
-    setAromas((prev) => prev.filter((_, i) => i !== idx));
-  };
-
-  const handleAddMaterial = () => {
+  const handleAddMaterial = async () => {
     const val = nuevoMaterialText.trim();
-    if (val && !materiales.includes(val)) {
+    if (!val) return;
+    try {
+      const res = await fetch('/api/admin/materiales', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre: val }),
+      });
+      if (res.ok) {
+        setNuevoMaterialText('');
+        fetchMateriales();
+        showToast('Material guardado en la BD');
+      } else {
+        setMateriales((prev) => [...prev, val]);
+        setNuevoMaterialText('');
+      }
+    } catch {
       setMateriales((prev) => [...prev, val]);
       setNuevoMaterialText('');
     }
   };
 
-  const handleEditMaterial = (idx: number) => {
+  const handleEditMaterial = async (idx: number) => {
     const val = editingMaterialVal.trim();
-    if (val) {
+    if (!val) return;
+    const oldName = materiales[idx];
+    const item = materialesFull.find((m) => m.nombre === oldName);
+    if (item?.id) {
+      await fetch(`/api/admin/materiales/${item.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre: val }),
+      });
+      fetchMateriales();
+    } else {
       setMateriales((prev) => {
         const next = [...prev];
         next[idx] = val;
         return next;
       });
-      setEditingMaterialIdx(null);
-      setEditingMaterialVal('');
     }
+    setEditingMaterialIdx(null);
+    setEditingMaterialVal('');
   };
 
-  const handleDeleteMaterial = (idx: number) => {
-    setMateriales((prev) => prev.filter((_, i) => i !== idx));
+  const handleDeleteMaterial = async (idx: number) => {
+    const oldName = materiales[idx];
+    const item = materialesFull.find((m) => m.nombre === oldName);
+    if (item?.id) {
+      await fetch(`/api/admin/materiales/${item.id}`, { method: 'DELETE' });
+      fetchMateriales();
+    } else {
+      setMateriales((prev) => prev.filter((_, i) => i !== idx));
+    }
   };
 
   const [filtroActivo, setFiltroActivo] = useState<string>('');
@@ -199,6 +308,7 @@ export default function ProductosPage() {
     const params = new URLSearchParams();
     if (search) params.set('search', search);
     if (filtroActivo !== '') params.set('activo', filtroActivo);
+    if (filtroTipo) params.set('tipo', filtroTipo);
     if (filtroAroma) params.set('aroma', filtroAroma);
     if (filtroMaterial) params.set('material', filtroMaterial);
     if (filtroBajoPedido) params.set('esBajoPedido', 'true');
@@ -211,7 +321,7 @@ export default function ProductosPage() {
   useEffect(() => {
     fetchProductos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, filtroActivo, filtroAroma, filtroMaterial, filtroBajoPedido]);
+  }, [search, filtroActivo, filtroTipo, filtroAroma, filtroMaterial, filtroBajoPedido]);
 
   /* ─── Modal helpers ─── */
 
@@ -227,9 +337,10 @@ export default function ProductosPage() {
     setForm({
       nombre: p.nombre,
       descripcion: p.descripcion,
-      aroma: p.aroma,
+      tipo: p.tipo || 'VELA',
+      aroma: p.aroma ?? '',
       material: p.material ?? '',
-      dimensiones: p.dimensiones,
+      dimensiones: p.dimensiones ?? '',
       precio: p.precio,
       stock: p.stock,
       activo: p.activo,
@@ -292,46 +403,49 @@ export default function ProductosPage() {
     setSaving(true);
 
     const imagenesFinales = form.imagenes.filter((url) => url !== '');
+    const isJabon = form.tipo === 'JABON';
 
     const payload = {
       nombre: form.nombre,
       descripcion: form.descripcion,
-      aroma: form.aroma,
-      material: form.material || null,
-      dimensiones: form.dimensiones,
+      tipo: form.tipo,
+      aroma: isJabon ? null : (form.aroma || null),
+      material: isJabon ? null : (form.material || null),
+      dimensiones: form.dimensiones ? form.dimensiones.trim() : null,
       precio: form.precio,
       stock: form.stock,
+      url_imagen: form.imagenes[0],
+      imagenes: imagenesFinales,
       activo: form.activo,
       esBajoPedido: form.esBajoPedido,
-      url_imagen: imagenesFinales[0] ?? '',
-      imagenes: imagenesFinales,
     };
 
-    const url = editingId ? `/api/productos/${editingId}` : '/api/productos';
-    const method = editingId ? 'PUT' : 'POST';
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    try {
+      const url = editingId ? `/api/productos/${editingId}` : '/api/productos';
+      const method = editingId ? 'PUT' : 'POST';
+      const r = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-    setSaving(false);
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      showToast(err?.error ?? 'Error al guardar el producto', 'error');
-      return;
+      if (r.ok) {
+        showToast(editingId ? 'Producto actualizado correctamente' : 'Producto creado correctamente');
+        setModalOpen(false);
+        fetchProductos();
+      } else {
+        const data = await r.json();
+        alert(data.error || 'Error al guardar producto');
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error al guardar producto');
+    } finally {
+      setSaving(false);
     }
-
-    setModalOpen(false);
-    showToast(
-      editingId ? 'Producto actualizado con éxito' : 'Producto creado con éxito',
-      'success'
-    );
-    fetchProductos();
   };
 
   /* ─── Delete product ─── */
+
 
   const handleDelete = async (id: string) => {
     await fetch(`/api/productos/${id}`, { method: 'DELETE' });
@@ -554,60 +668,106 @@ export default function ProductosPage() {
 
 
             <form onSubmit={handleSave} className="p-6 space-y-5">
+              {/* Tipo de producto selector */}
+              <div className="bg-white/5 border border-white/10 p-4 rounded-xl space-y-2">
+                <label className="block text-xs font-semibold text-[#e8b86d] uppercase tracking-wider mb-2">
+                  Tipo de Producto *
+                </label>
+                <div className="flex items-center gap-6">
+                  <label className="flex items-center gap-2 text-sm font-medium text-white cursor-pointer">
+                    <input
+                      type="radio"
+                      name="tipoProducto"
+                      value="VELA"
+                      checked={form.tipo === 'VELA'}
+                      onChange={() => setForm((f) => ({ ...f, tipo: 'VELA' }))}
+                      className="w-4 h-4 text-[#e8b86d] focus:ring-[#e8b86d] accent-[#e8b86d]"
+                    />
+                    <span>🕯️ Vela Artesanal</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 text-sm font-medium text-white cursor-pointer">
+                    <input
+                      type="radio"
+                      name="tipoProducto"
+                      value="JABON"
+                      checked={form.tipo === 'JABON'}
+                      onChange={() => setForm((f) => ({ ...f, tipo: 'JABON' }))}
+                      className="w-4 h-4 text-[#e8b86d] focus:ring-[#e8b86d] accent-[#e8b86d]"
+                    />
+                    <span>🧼 Jabón Artesanal</span>
+                  </label>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Nombre *</label>
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Nombre del Producto *</label>
                   <input required value={form.nombre} onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all" />
+                    placeholder="ej: Vela Botánica Lavanda o Jabón de Avena & Miel"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all" />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Aroma *</label>
-                  <select
-                    required
-                    value={form.aroma}
-                    onChange={(e) => setForm((f) => ({ ...f, aroma: e.target.value }))}
-                    className="w-full bg-[#1a1a2e] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all"
-                  >
-                    <option value="">Seleccionar aroma...</option>
-                    {aromas.map((a) => (
-                      <option key={a} value={a}>{a}</option>
-                    ))}
-                    {form.aroma && !aromas.includes(form.aroma) && (
-                      <option value={form.aroma}>{form.aroma}</option>
-                    )}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Material</label>
-                  <select
-                    value={form.material}
-                    onChange={(e) => setForm((f) => ({ ...f, material: e.target.value }))}
-                    className="w-full bg-[#1a1a2e] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all"
-                  >
-                    <option value="">Seleccionar material...</option>
-                    {materiales.map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                    {form.material && !materiales.includes(form.material) && (
-                      <option value={form.material}>{form.material}</option>
-                    )}
-                  </select>
-                </div>
+
+                {/* Conditional Aroma & Material for VELA only */}
+                {form.tipo === 'VELA' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">Aroma Predeterminado *</label>
+                      <select
+                        required
+                        value={form.aroma}
+                        onChange={(e) => setForm((f) => ({ ...f, aroma: e.target.value }))}
+                        className="w-full bg-[#1a1a2e] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all"
+                      >
+                        <option value="">Seleccionar aroma...</option>
+                        {aromas.map((a) => (
+                          <option key={a} value={a}>{a}</option>
+                        ))}
+                        {form.aroma && !aromas.includes(form.aroma) && (
+                          <option value={form.aroma}>{form.aroma}</option>
+                        )}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">Material</label>
+                      <select
+                        value={form.material}
+                        onChange={(e) => setForm((f) => ({ ...f, material: e.target.value }))}
+                        className="w-full bg-[#1a1a2e] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all"
+                      >
+                        <option value="">Seleccionar material...</option>
+                        {materiales.map((m) => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                        {form.material && !materiales.includes(form.material) && (
+                          <option value={form.material}>{form.material}</option>
+                        )}
+                      </select>
+                    </div>
+                  </>
+                )}
+
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-2">Precio (COP) *</label>
-                  <input required type="number" min={0} value={form.precio} onChange={(e) => setForm((f) => ({ ...f, precio: parseFloat(e.target.value) }))}
+                  <input required type="number" min={0} value={form.precio} onChange={(e) => setForm((f) => ({ ...f, precio: parseFloat(e.target.value) || 0 }))}
                     className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all" />
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Stock *</label>
-                  <input required type="number" min={0} value={form.stock} onChange={(e) => setForm((f) => ({ ...f, stock: parseInt(e.target.value) }))}
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Stock Disponible *</label>
+                  <input required type="number" min={0} value={form.stock} onChange={(e) => setForm((f) => ({ ...f, stock: parseInt(e.target.value, 10) || 0 }))}
                     className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all" />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Dimensiones</label>
-                  <input value={form.dimensiones} onChange={(e) => setForm((f) => ({ ...f, dimensiones: e.target.value }))}
-                    placeholder="ej: 7cm diámetro x 10cm alto"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all" />
+
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Dimensiones / Peso</label>
+                  <input
+                    value={form.dimensiones}
+                    onChange={(e) => setForm((f) => ({ ...f, dimensiones: e.target.value }))}
+                    placeholder="ej: 8 cm x 7 cm o 120g / 6x6 cm"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all"
+                  />
                 </div>
               </div>
 
@@ -616,6 +776,7 @@ export default function ProductosPage() {
                 <textarea required rows={3} value={form.descripcion} onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))}
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all resize-none" />
               </div>
+
 
               {/* ─── Image Slots ─── */}
               <div>

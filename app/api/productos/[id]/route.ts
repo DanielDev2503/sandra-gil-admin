@@ -10,16 +10,36 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { nombre, descripcion, aroma, material, dimensiones, precio, stock, url_imagen, imagenes, activo, esBajoPedido } = body;
+    const {
+      nombre,
+      descripcion,
+      tipo = 'VELA',
+      aroma,
+      aromaId,
+      material,
+      materialId,
+      dimensiones,
+      precio,
+      stock,
+      url_imagen,
+      imagenes,
+      activo,
+      esBajoPedido,
+    } = body;
+
+    const isJabon = tipo === 'JABON';
 
     const producto = await prisma.producto.update({
       where: { id },
       data: {
         nombre,
         descripcion,
-        aroma,
-        material: material || null,
-        dimensiones,
+        tipo: isJabon ? 'JABON' : 'VELA',
+        aroma: isJabon ? null : (aroma || null),
+        aromaId: isJabon ? null : (aromaId || null),
+        material: isJabon ? null : (material || null),
+        materialId: isJabon ? null : (materialId || null),
+        dimensiones: dimensiones ? String(dimensiones).trim() : null,
         precio: parseFloat(String(precio)),
         stock: parseInt(String(stock), 10),
         url_imagen,
@@ -34,6 +54,7 @@ export async function PUT(
     return NextResponse.json({ error: 'Error al actualizar producto' }, { status: 500 });
   }
 }
+
 
 export async function DELETE(
   _request: Request,
