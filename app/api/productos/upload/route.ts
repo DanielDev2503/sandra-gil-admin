@@ -19,8 +19,24 @@ export async function POST(request: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const originalBuffer = Buffer.from(arrayBuffer);
 
+    // Validate original buffer
+    if (!originalBuffer || originalBuffer.length === 0) {
+      return NextResponse.json(
+        { error: 'El archivo recibido está vacío' },
+        { status: 400 }
+      );
+    }
+
     // Apply watermark
     const watermarkedBuffer = await applyWatermark(originalBuffer);
+
+    // Validate watermarked buffer before uploading
+    if (!watermarkedBuffer || watermarkedBuffer.length === 0) {
+      return NextResponse.json(
+        { error: 'Error al procesar la imagen: buffer vacío' },
+        { status: 500 }
+      );
+    }
 
     const ext = file.name.split('.').pop() ?? 'jpg';
     const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
