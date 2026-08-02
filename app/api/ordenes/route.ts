@@ -5,6 +5,7 @@ import { prisma } from '@/lib/db';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
+  const search = searchParams.get('search') || searchParams.get('q');
   const estadoEnvio = searchParams.get('estado_envio');
   const estadoPago = searchParams.get('estado_pago');
   const ciudad = searchParams.get('ciudad');
@@ -12,11 +13,24 @@ export async function GET(request: Request) {
   const limit = 20;
 
   try {
-    const whereClause = {
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const whereClause: any = {
       ...(estadoEnvio ? { estado_envio: estadoEnvio } : {}),
       ...(estadoPago ? { estado_pago: estadoPago } : {}),
       ...(ciudad ? { ciudad: { contains: ciudad, mode: 'insensitive' as const } } : {}),
     };
+
+    if (search && search.trim() !== '') {
+      const q = search.trim();
+      whereClause.OR = [
+        { id: { contains: q, mode: 'insensitive' as const } },
+        { id_transaccion_wompi: { contains: q, mode: 'insensitive' as const } },
+        { cliente_nombre: { contains: q, mode: 'insensitive' as const } },
+        { cliente_email: { contains: q, mode: 'insensitive' as const } },
+        { cliente_telefono: { contains: q, mode: 'insensitive' as const } },
+      ];
+    }
+    /* eslint-enable @typescript-eslint/no-explicit-any */
 
     const [pedidos, total] = await Promise.all([
       prisma.pedido.findMany({
@@ -45,3 +59,4 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Error al obtener pedidos' }, { status: 500 });
   }
 }
+
