@@ -20,12 +20,14 @@ import {
   Copy,
   Check,
   ShieldCheck,
+  Wind,
 } from 'lucide-react';
 
 interface ItemPedido {
   id: string;
   cantidad: number;
   precio_unitario: number;
+  aroma?: string | null;
   producto: { nombre: string; url_imagen: string };
 }
 
@@ -641,12 +643,28 @@ export default function OrdenesPage() {
 
               {/* Items */}
               <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Productos</p>
-                <div className="space-y-2">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Productos del Pedido</p>
+                <div className="space-y-3">
                   {selectedPedido.items.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between text-sm">
-                      <span className="text-slate-300">{item.producto.nombre}</span>
-                      <span className="text-slate-500">x{item.cantidad} · {formatCOP(item.precio_unitario)}</span>
+                    <div key={item.id} className="bg-white/3 border border-white/8 rounded-xl p-3 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-sm font-medium text-white leading-tight">{item.producto.nombre}</span>
+                        <span className="text-xs text-slate-400 whitespace-nowrap shrink-0">x{item.cantidad} · {formatCOP(item.precio_unitario)}</span>
+                      </div>
+                      {item.aroma ? (
+                        <div className="flex items-center gap-1.5">
+                          <Wind className="w-3.5 h-3.5 text-[#e8b86d] shrink-0" />
+                          <span className="text-[11px] font-bold text-[#e8b86d] uppercase tracking-wider">Aroma:</span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-[#e8b86d]/15 text-[#e8b86d] border border-[#e8b86d]/30">
+                            {item.aroma}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <Wind className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                          <span className="text-[11px] text-slate-600">Sin aroma seleccionado</span>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

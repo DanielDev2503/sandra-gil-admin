@@ -87,4 +87,5 @@ model ItemPedido {
   producto        Producto @relation(fields: [producto_id], references: [id])
   cantidad        Int
   precio_unitario Float
+  aroma           String?
 }

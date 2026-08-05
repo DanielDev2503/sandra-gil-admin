@@ -37,7 +37,11 @@ export async function GET(request: Request) {
         where: whereClause,
         include: {
           items: {
-            include: {
+            select: {
+              id: true,
+              cantidad: true,
+              precio_unitario: true,
+              aroma: true,
               producto: {
                 select: { nombre: true, url_imagen: true },
               },
