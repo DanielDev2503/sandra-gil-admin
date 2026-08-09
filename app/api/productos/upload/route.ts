@@ -39,15 +39,19 @@ export async function POST(request: Request) {
       watermarkedBuffer = originalBuffer;
     }
 
-    const ext = file.name.split('.').pop() ?? 'png';
+    const contentType = file.type || 'image/png';
+    const ext = file.name ? file.name.split('.').pop() : (contentType.split('/')[1] || 'png');
     const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const filePath = `velas/${uniqueName}`;
+
+    // Convert Buffer to Web API Blob to prevent binary string corruption in Next.js runtime
+    const uploadBlob = new Blob([new Uint8Array(watermarkedBuffer)], { type: contentType });
 
     const supabase = createServerClient();
     const { error: uploadError } = await supabase.storage
       .from('productos')
-      .upload(filePath, watermarkedBuffer, {
-        contentType: file.type || 'image/png',
+      .upload(filePath, uploadBlob, {
+        contentType: contentType,
         upsert: true,
       });
 
