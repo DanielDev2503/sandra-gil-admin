@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import Image from 'next/image';
+import SafeImage from '@/components/SafeImage';
 import { uploadProductImage, deleteProductImage } from '@/lib/storage';
 import {
   Plus,
@@ -593,7 +594,7 @@ export default function ProductosPage() {
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-xl overflow-hidden bg-white/5 shrink-0">
                           {p.url_imagen ? (
-                            <Image src={p.url_imagen} alt={p.nombre} width={48} height={48} className="object-cover w-full h-full" />
+                            <SafeImage src={p.url_imagen} alt={p.nombre} width={48} height={48} className="object-cover w-full h-full" />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center">
                               <Package className="w-5 h-5 text-slate-600" />
@@ -626,7 +627,7 @@ export default function ProductosPage() {
                       <div className="flex items-center gap-1">
                         {(p.imagenes?.length ? p.imagenes : p.url_imagen ? [p.url_imagen] : []).map((img, i) => (
                           <div key={i} className="w-8 h-8 rounded-lg overflow-hidden border border-white/10">
-                            <Image src={img} alt={`img-${i}`} width={32} height={32} className="object-cover w-full h-full" />
+                            <SafeImage src={img} alt={`img-${i}`} width={32} height={32} className="object-cover w-full h-full" fallbackIcon={ImageIcon} />
                           </div>
                         ))}
                         {(!p.imagenes?.length && !p.url_imagen) && (
@@ -823,7 +824,7 @@ export default function ProductosPage() {
 
                         {imgUrl ? (
                           <div className="relative aspect-square rounded-xl overflow-hidden border border-white/10 bg-white/5">
-                            <Image src={imgUrl} alt={`${label}`} fill sizes="(max-width: 768px) 100vw, 25vw" className="object-cover" />
+                            <SafeImage src={imgUrl} alt={`${label}`} fill sizes="(max-width: 768px) 100vw, 25vw" className="object-cover" fallbackIcon={ImageIcon} />
                             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-2">
                               <button
                                 type="button"

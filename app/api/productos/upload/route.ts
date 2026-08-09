@@ -27,18 +27,19 @@ export async function POST(request: Request) {
       );
     }
 
-    // Apply watermark
-    const watermarkedBuffer = await applyWatermark(originalBuffer);
-
-    // Validate watermarked buffer before uploading
-    if (!watermarkedBuffer || watermarkedBuffer.length === 0) {
-      return NextResponse.json(
-        { error: 'Error al procesar la imagen: buffer vacío' },
-        { status: 500 }
-      );
+    // Apply watermark with safe fallback to originalBuffer on any error
+    let watermarkedBuffer: Buffer = originalBuffer;
+    try {
+      const processed = await applyWatermark(originalBuffer);
+      if (processed && processed.length > 0) {
+        watermarkedBuffer = processed;
+      }
+    } catch (watermarkErr) {
+      console.warn('⚠️ No se pudo aplicar la marca de agua, usando buffer original:', watermarkErr);
+      watermarkedBuffer = originalBuffer;
     }
 
-    const ext = file.name.split('.').pop() ?? 'jpg';
+    const ext = file.name.split('.').pop() ?? 'png';
     const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const filePath = `velas/${uniqueName}`;
 
@@ -46,7 +47,7 @@ export async function POST(request: Request) {
     const { error: uploadError } = await supabase.storage
       .from('productos')
       .upload(filePath, watermarkedBuffer, {
-        contentType: file.type || 'image/jpeg',
+        contentType: file.type || 'image/png',
         upsert: true,
       });
 
