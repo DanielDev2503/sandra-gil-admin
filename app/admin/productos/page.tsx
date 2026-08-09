@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import Image from 'next/image';
 import SafeImage from '@/components/SafeImage';
+import ImageUpload from '@/components/ImageUpload';
 import { uploadProductImage, deleteProductImage } from '@/lib/storage';
 import {
   Plus,
@@ -105,12 +106,6 @@ const DEFAULT_MATERIALES = [
 
 
 export default function ProductosPage() {
-  const fileRefs = [
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-  ];
-
   const [productos, setProductos] = useState<Producto[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -288,9 +283,16 @@ export default function ProductosPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ProductoForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
-  const [uploadingSlot, setUploadingSlot] = useState<number | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  
+  // Separated Image state for form:
+  // 1. Existing Supabase URLs
+  const [imagenesExistentes, setImagenesExistentes] = useState<[string, string, string]>(['', '', '']);
+  // 2. Newly selected File objects
+  const [imageFiles, setImageFiles] = useState<[File | null, File | null, File | null]>([null, null, null]);
+  // 3. Previews (either Supabase URL or local blob ObjectURL)
+  const [imagePreviews, setImagePreviews] = useState<[string, string, string]>(['', '', '']);
   // Track old image URLs to delete ONLY after successful save
   const [pendingDeleteUrls, setPendingDeleteUrls] = useState<string[]>([]);
 
@@ -331,6 +333,9 @@ export default function ProductosPage() {
   const openCreate = () => {
     setEditingId(null);
     setForm(EMPTY_FORM);
+    setImagenesExistentes(['', '', '']);
+    setImageFiles([null, null, null]);
+    setImagePreviews(['', '', '']);
     setPendingDeleteUrls([]);
     setModalOpen(true);
   };
@@ -338,6 +343,11 @@ export default function ProductosPage() {
   const openEdit = (p: Producto) => {
     setEditingId(p.id);
     const imgs = p.imagenes ?? [];
+    const existing: [string, string, string] = [
+      imgs[0] || p.url_imagen || '',
+      imgs[1] || '',
+      imgs[2] || '',
+    ];
     setForm({
       nombre: p.nombre,
       descripcion: p.descripcion,
@@ -349,68 +359,125 @@ export default function ProductosPage() {
       stock: p.stock,
       activo: p.activo,
       esBajoPedido: p.esBajoPedido,
-      imagenes: [
-        imgs[0] || p.url_imagen || '',
-        imgs[1] || '',
-        imgs[2] || '',
-      ],
+      imagenes: existing,
     });
+    setImagenesExistentes(existing);
+    setImageFiles([null, null, null]);
+    setImagePreviews(existing);
     setPendingDeleteUrls([]);
     setModalOpen(true);
   };
 
-  /* ─── Image handling ─── */
+  /* ─── Image handling (Local Previews + File Selection) ─── */
 
-  const handleImageUpload = async (slotIndex: number, file: File) => {
-    setUploadingSlot(slotIndex);
-    try {
-      // Track old URL for deferred cleanup (only delete after successful save)
-      const currentUrl = form.imagenes[slotIndex];
-      if (currentUrl) {
-        setPendingDeleteUrls((prev) => [...prev, currentUrl]);
-      }
-      const publicUrl = await uploadProductImage(file);
-      setForm((prev) => {
-        const updated: [string, string, string] = [...prev.imagenes];
-        updated[slotIndex] = publicUrl;
-        return { ...prev, imagenes: updated };
-      });
-      showToast('Imagen subida correctamente');
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Error al subir imagen', 'error');
-    } finally {
-      setUploadingSlot(null);
-      const ref = fileRefs[slotIndex];
-      if (ref.current) ref.current.value = '';
-    }
-  };
+  const handleFileSelect = (slotIndex: number, file: File) => {
+    // Generate immediate local preview using URL.createObjectURL
+    const previewUrl = URL.createObjectURL(file);
 
-  const handleImageDelete = (slotIndex: number) => {
-    const url = form.imagenes[slotIndex];
-    if (url) {
-      // Defer deletion until save — just track URL and clear the slot
-      setPendingDeleteUrls((prev) => [...prev, url]);
+    // If slot had an existing Supabase URL, mark it for pending cleanup on save
+    const oldExistingUrl = imagenesExistentes[slotIndex];
+    if (oldExistingUrl) {
+      setPendingDeleteUrls((prev) => [...prev, oldExistingUrl]);
     }
-    setForm((prev) => {
-      const updated: [string, string, string] = [...prev.imagenes];
+
+    // Revoke old blob preview if any
+    const oldPreview = imagePreviews[slotIndex];
+    if (oldPreview && oldPreview.startsWith('blob:')) {
+      URL.revokeObjectURL(oldPreview);
+    }
+
+    setImagenesExistentes((prev) => {
+      const updated: [string, string, string] = [...prev];
       updated[slotIndex] = '';
-      return { ...prev, imagenes: updated };
+      return updated;
+    });
+
+    setImageFiles((prev) => {
+      const updated: [File | null, File | null, File | null] = [...prev];
+      updated[slotIndex] = file;
+      return updated;
+    });
+
+    setImagePreviews((prev) => {
+      const updated: [string, string, string] = [...prev];
+      updated[slotIndex] = previewUrl;
+      return updated;
     });
   };
 
-  /* ─── Save ─── */
+  const handleImageDelete = (slotIndex: number) => {
+    const oldExistingUrl = imagenesExistentes[slotIndex];
+    if (oldExistingUrl) {
+      setPendingDeleteUrls((prev) => [...prev, oldExistingUrl]);
+    }
+
+    const oldPreview = imagePreviews[slotIndex];
+    if (oldPreview && oldPreview.startsWith('blob:')) {
+      URL.revokeObjectURL(oldPreview);
+    }
+
+    setImagenesExistentes((prev) => {
+      const updated: [string, string, string] = [...prev];
+      updated[slotIndex] = '';
+      return updated;
+    });
+
+    setImageFiles((prev) => {
+      const updated: [File | null, File | null, File | null] = [...prev];
+      updated[slotIndex] = null;
+      return updated;
+    });
+
+    setImagePreviews((prev) => {
+      const updated: [string, string, string] = [...prev];
+      updated[slotIndex] = '';
+      return updated;
+    });
+  };
+
+  /* ─── Save (Unified Upload + DB Save) ─── */
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!form.imagenes[0]) {
-      showToast('Debes subir al menos la imagen principal.', 'error');
+    if (!imagePreviews[0]) {
+      showToast('Debes seleccionar al menos la imagen principal.', 'error');
       return;
     }
 
     setSaving(true);
 
-    const imagenesFinales = form.imagenes.filter((url) => url !== '');
+    // Step 1: Upload new File objects to Supabase API FIRST
+    const finalUrls: string[] = [];
+
+    for (let i = 0; i < 3; i++) {
+      const file = imageFiles[i];
+      if (file) {
+        try {
+          const publicUrl = await uploadProductImage(file);
+          if (!publicUrl) {
+            throw new Error(`Error al subir la imagen ${i + 1}`);
+          }
+          finalUrls.push(publicUrl);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : `Error al subir la imagen ${i + 1}`;
+          showToast(msg, 'error');
+          setSaving(false);
+          return; // STOP! Do not proceed to save product with broken/missing URLs
+        }
+      } else if (imagenesExistentes[i]) {
+        finalUrls.push(imagenesExistentes[i]);
+      }
+    }
+
+    const imagenesFinales = finalUrls.filter(Boolean);
+
+    if (imagenesFinales.length === 0) {
+      showToast('Debes seleccionar al menos la imagen principal.', 'error');
+      setSaving(false);
+      return;
+    }
+
     const isJabon = form.tipo === 'JABON';
 
     const payload = {
@@ -422,7 +489,7 @@ export default function ProductosPage() {
       dimensiones: form.dimensiones ? form.dimensiones.trim() : null,
       precio: form.precio,
       stock: form.stock,
-      url_imagen: form.imagenes[0],
+      url_imagen: imagenesFinales[0],
       imagenes: imagenesFinales,
       activo: form.activo,
       esBajoPedido: form.esBajoPedido,
@@ -440,8 +507,14 @@ export default function ProductosPage() {
       if (r.ok) {
         showToast(editingId ? 'Producto actualizado correctamente' : 'Producto creado correctamente');
 
-        // NOW it's safe to delete old images from Storage
-        // (product is saved, so we won't leave orphaned URLs)
+        // Cleanup local blob object URLs
+        imagePreviews.forEach((prev) => {
+          if (prev && prev.startsWith('blob:')) {
+            URL.revokeObjectURL(prev);
+          }
+        });
+
+        // Cleanup pending delete old Supabase URLs from Storage
         const urlsToDelete = pendingDeleteUrls.filter(
           (u) => u && !imagenesFinales.includes(u)
         );
@@ -450,8 +523,8 @@ export default function ProductosPage() {
             urlsToDelete.map((u) => deleteProductImage(u))
           ).catch(() => {/* cleanup errors are non-critical */});
         }
-        setPendingDeleteUrls([]);
 
+        setPendingDeleteUrls([]);
         setModalOpen(false);
         fetchProductos();
       } else {
@@ -805,96 +878,19 @@ export default function ProductosPage() {
                   Imágenes <span className="text-slate-500 font-normal">(máx. 3 — la primera es la principal)</span>
                 </label>
                 <div className="grid grid-cols-3 gap-4">
-                  {SLOT_LABELS.map((label, idx) => {
-                    const imgUrl = form.imagenes[idx];
-                    const isUploading = uploadingSlot === idx;
-
-                    return (
-                      <div key={idx} className="relative group">
-                        <input
-                          ref={fileRefs[idx]}
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) handleImageUpload(idx, file);
-                          }}
-                        />
-
-                        {imgUrl ? (
-                          <div className="relative aspect-square rounded-xl overflow-hidden border border-white/10 bg-white/5">
-                            <SafeImage src={imgUrl} alt={`${label}`} fill sizes="(max-width: 768px) 100vw, 25vw" className="object-cover" fallbackIcon={ImageIcon} />
-                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => fileRefs[idx].current?.click()}
-                                className="p-2.5 bg-white/15 hover:bg-white/25 rounded-xl text-white transition-all backdrop-blur-sm"
-                                title="Reemplazar imagen"
-                              >
-                                <Camera className="w-4 h-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleImageDelete(idx)}
-                                className="p-2.5 bg-red-500/20 hover:bg-red-500/40 rounded-xl text-red-300 transition-all backdrop-blur-sm"
-                                title="Eliminar imagen"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                            <span className={`absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded-md backdrop-blur-sm ${
-                              idx === 0
-                                ? 'bg-[#e8b86d]/80 text-[#1a1a2e]'
-                                : 'bg-white/20 text-white/80'
-                            }`}>
-                              {label}
-                            </span>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => fileRefs[idx].current?.click()}
-                            disabled={isUploading}
-                            className={`aspect-square w-full rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-all duration-200 ${
-                              idx === 0
-                                ? 'border-[#e8b86d]/30 hover:border-[#e8b86d]/60 hover:bg-[#e8b86d]/5'
-                                : 'border-white/10 hover:border-white/25 hover:bg-white/5'
-                            } disabled:opacity-50 disabled:cursor-not-allowed`}
-                          >
-                            {isUploading ? (
-                              <>
-                                <Loader2 className="w-6 h-6 animate-spin text-[#e8b86d]" />
-                                <span className="text-xs text-slate-400">Subiendo...</span>
-                              </>
-                            ) : (
-                              <>
-                                {idx === 0 ? (
-                                  <Camera className="w-6 h-6 text-[#e8b86d]/60" />
-                                ) : (
-                                  <ImageIcon className="w-6 h-6 text-slate-600" />
-                                )}
-                                <span className={`text-xs font-medium ${
-                                  idx === 0 ? 'text-[#e8b86d]/60' : 'text-slate-600'
-                                }`}>
-                                  {label}
-                                </span>
-                                <Upload className="w-3.5 h-3.5 text-slate-600" />
-                              </>
-                            )}
-                          </button>
-                        )}
-
-                        {isUploading && imgUrl && (
-                          <div className="absolute inset-0 bg-black/70 rounded-xl flex items-center justify-center">
-                            <Loader2 className="w-6 h-6 animate-spin text-[#e8b86d]" />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {SLOT_LABELS.map((label, idx) => (
+                    <ImageUpload
+                      key={idx}
+                      label={label}
+                      imageUrl={imagePreviews[idx]}
+                      isUploading={saving}
+                      onUpload={(file) => handleFileSelect(idx, file)}
+                      onDelete={imagePreviews[idx] ? () => handleImageDelete(idx) : undefined}
+                      isPrimary={idx === 0}
+                    />
+                  ))}
                 </div>
-                {!form.imagenes[0] && (
+                {!imagePreviews[0] && (
                   <p className="text-xs text-amber-400/70 mt-2 flex items-center gap-1">
                     <Camera className="w-3 h-3" />
                     La imagen principal es obligatoria
@@ -941,7 +937,7 @@ export default function ProductosPage() {
                   className="px-5 py-3 text-sm font-medium text-slate-400 hover:text-white hover:bg-white/5 rounded-xl transition-all">
                   Cancelar
                 </button>
-                <button type="submit" disabled={saving || uploadingSlot !== null}
+                <button type="submit" disabled={saving}
                   className="flex items-center gap-2 px-6 py-3 bg-[#e8b86d] hover:bg-[#d4a85a] text-[#1a1a2e] font-semibold rounded-xl transition-all active:scale-95 disabled:opacity-50 text-sm">
                   {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                   {editingId ? 'Guardar cambios' : 'Crear producto'}

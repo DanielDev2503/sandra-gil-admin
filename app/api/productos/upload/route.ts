@@ -52,13 +52,21 @@ export async function POST(request: Request) {
       });
 
     if (uploadError) {
+      console.error('Error al subir imagen a Supabase Storage:', uploadError);
       return NextResponse.json(
-        { error: `Error al subir a Supabase: ${uploadError.message}` },
+        { error: `Error al subir a Supabase Storage: ${uploadError.message}` },
         { status: 500 }
       );
     }
 
     const { data } = supabase.storage.from('productos').getPublicUrl(filePath);
+
+    if (!data || !data.publicUrl) {
+      return NextResponse.json(
+        { error: 'No se pudo obtener la URL pública de la imagen en Supabase' },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ publicUrl: data.publicUrl });
   } catch (error: any) {

@@ -30,7 +30,10 @@ export default function ImageUpload({
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
-            if (file) onUpload(file);
+            if (file) {
+              onUpload(file);
+              e.target.value = '';
+            }
           }}
         />
 
