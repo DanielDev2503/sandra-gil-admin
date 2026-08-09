@@ -290,6 +290,8 @@ export default function ProductosPage() {
   const [uploadingSlot, setUploadingSlot] = useState<number | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  // Track old image URLs to delete ONLY after successful save
+  const [pendingDeleteUrls, setPendingDeleteUrls] = useState<string[]>([]);
 
   /* ─── Toast helpers ─── */
 
@@ -328,6 +330,7 @@ export default function ProductosPage() {
   const openCreate = () => {
     setEditingId(null);
     setForm(EMPTY_FORM);
+    setPendingDeleteUrls([]);
     setModalOpen(true);
   };
 
@@ -351,6 +354,7 @@ export default function ProductosPage() {
         imgs[2] || '',
       ],
     });
+    setPendingDeleteUrls([]);
     setModalOpen(true);
   };
 
@@ -359,9 +363,10 @@ export default function ProductosPage() {
   const handleImageUpload = async (slotIndex: number, file: File) => {
     setUploadingSlot(slotIndex);
     try {
+      // Track old URL for deferred cleanup (only delete after successful save)
       const currentUrl = form.imagenes[slotIndex];
       if (currentUrl) {
-        await deleteProductImage(currentUrl);
+        setPendingDeleteUrls((prev) => [...prev, currentUrl]);
       }
       const publicUrl = await uploadProductImage(file);
       setForm((prev) => {
@@ -369,8 +374,9 @@ export default function ProductosPage() {
         updated[slotIndex] = publicUrl;
         return { ...prev, imagenes: updated };
       });
+      showToast('Imagen subida correctamente');
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error al subir imagen');
+      showToast(err instanceof Error ? err.message : 'Error al subir imagen', 'error');
     } finally {
       setUploadingSlot(null);
       const ref = fileRefs[slotIndex];
@@ -378,10 +384,11 @@ export default function ProductosPage() {
     }
   };
 
-  const handleImageDelete = async (slotIndex: number) => {
+  const handleImageDelete = (slotIndex: number) => {
     const url = form.imagenes[slotIndex];
     if (url) {
-      await deleteProductImage(url);
+      // Defer deletion until save — just track URL and clear the slot
+      setPendingDeleteUrls((prev) => [...prev, url]);
     }
     setForm((prev) => {
       const updated: [string, string, string] = [...prev.imagenes];
@@ -396,7 +403,7 @@ export default function ProductosPage() {
     e.preventDefault();
 
     if (!form.imagenes[0]) {
-      alert('Debes subir al menos la imagen principal.');
+      showToast('Debes subir al menos la imagen principal.', 'error');
       return;
     }
 
@@ -431,14 +438,27 @@ export default function ProductosPage() {
 
       if (r.ok) {
         showToast(editingId ? 'Producto actualizado correctamente' : 'Producto creado correctamente');
+
+        // NOW it's safe to delete old images from Storage
+        // (product is saved, so we won't leave orphaned URLs)
+        const urlsToDelete = pendingDeleteUrls.filter(
+          (u) => u && !imagenesFinales.includes(u)
+        );
+        if (urlsToDelete.length > 0) {
+          Promise.allSettled(
+            urlsToDelete.map((u) => deleteProductImage(u))
+          ).catch(() => {/* cleanup errors are non-critical */});
+        }
+        setPendingDeleteUrls([]);
+
         setModalOpen(false);
         fetchProductos();
       } else {
         const data = await r.json();
-        alert(data.error || 'Error al guardar producto');
+        showToast(data.error || 'Error al guardar producto', 'error');
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error al guardar producto');
+      showToast(err instanceof Error ? err.message : 'Error al guardar producto', 'error');
     } finally {
       setSaving(false);
     }
