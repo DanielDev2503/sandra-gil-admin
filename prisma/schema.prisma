@@ -15,22 +15,40 @@ enum TipoProducto {
 }
 
 model Producto {
-  id           String       @id @default(uuid())
+  id           String              @id @default(uuid())
   nombre       String
   descripcion  String
-  tipo         TipoProducto @default(VELA)
+  tipo         TipoProducto        @default(VELA)
   aroma        String?
   aromaId      String?
   material     String?
   materialId   String?
   dimensiones  String?
-  precio       Float
-  stock        Int
-  esBajoPedido Boolean      @default(false)
-  url_imagen   String
-  imagenes     String[]     @default([])
-  activo       Boolean      @default(true)
+  precio       Float?
+  stock        Int                 @default(0)
+  esBajoPedido Boolean             @default(false)
+  url_imagen   String?
+  imagenes     String[]            @default([])
+  activo       Boolean             @default(true)
+  variaciones  VariacionProducto[]
   items        ItemPedido[]
+  resenas      Resena[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+}
+
+model VariacionProducto {
+  id          String    @id @default(uuid())
+  productoId  String
+  producto    Producto  @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  nombre      String
+  imagen      String
+  precio      Float?    // Null = hereda el precio del producto base
+  activo      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([productoId])
 }
 
 model Aroma {
@@ -49,7 +67,6 @@ model Material {
   creado_en   DateTime @default(now())
 }
 
-
 model ConfiguracionIA {
   id              String   @id @default("default")
   promptGenerador String   @db.Text
@@ -60,7 +77,7 @@ model ConfiguracionIA {
 }
 
 model Pedido {
-  id                   String     @id @default(uuid())
+  id                   String       @id @default(uuid())
   cliente_nombre       String
   cliente_email        String
   cliente_telefono     String
@@ -70,22 +87,35 @@ model Pedido {
   total_productos      Float
   costo_envio          Float
   total_pagado         Float
-  estado_pago          String     @default("pendiente") // 'pendiente', 'pagado', 'fallido'
+  estado_pago          String       @default("pendiente") // 'pendiente', 'pagado', 'fallido'
   id_transaccion_wompi String?
-  creado_en            DateTime   @default(now())
-  estado_envio         String     @default("PENDING") // PENDING, APPROVED, SHIPPED, DELIVERED, DECLINED
+  creado_en            DateTime     @default(now())
+  estado_envio         String       @default("PENDING") // PENDING, APPROVED, SHIPPED, DELIVERED, DECLINED
   numero_guia          String?
   notas_admin          String?
   items                ItemPedido[]
 }
 
 model ItemPedido {
-  id              String   @id @default(uuid())
-  pedido_id       String
-  pedido          Pedido   @relation(fields: [pedido_id], references: [id], onDelete: Cascade)
-  producto_id     String
-  producto        Producto @relation(fields: [producto_id], references: [id])
-  cantidad        Int
-  precio_unitario Float
-  aroma           String?
+  id               String    @id @default(uuid())
+  pedido_id        String
+  pedido           Pedido    @relation(fields: [pedido_id], references: [id], onDelete: Cascade)
+  producto_id      String
+  producto         Producto  @relation(fields: [producto_id], references: [id])
+  variacion_id     String?
+  variacion_nombre String?
+  variacion_imagen String?
+  cantidad         Int
+  precio_unitario  Float
+  aroma            String?
+}
+
+model Resena {
+  id          String   @id @default(uuid())
+  producto_id String
+  producto    Producto @relation(fields: [producto_id], references: [id], onDelete: Cascade)
+  autor       String
+  calificacion Int
+  comentario  String
+  creado_en   DateTime @default(now())
 }

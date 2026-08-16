@@ -22,13 +22,25 @@ export async function GET(request: Request) {
         ...(material ? { material: { contains: material, mode: 'insensitive' } } : {}),
         ...(esBajoPedido === 'true' ? { esBajoPedido: true } : {}),
       },
+      include: {
+        variaciones: {
+          orderBy: { createdAt: 'asc' },
+        },
+      },
       orderBy: { nombre: 'asc' },
     });
     return NextResponse.json(productos);
   } catch (error) {
-    console.error(error);
+    console.error('Error al obtener productos:', error);
     return NextResponse.json({ error: 'Error al obtener productos' }, { status: 500 });
   }
+}
+
+interface VariacionInput {
+  nombre: string;
+  imagen: string;
+  precio?: number | string | null;
+  activo?: boolean;
 }
 
 export async function POST(request: Request) {
@@ -49,31 +61,57 @@ export async function POST(request: Request) {
       imagenes,
       activo,
       esBajoPedido,
+      variaciones = [],
     } = body;
 
     const isJabon = tipo === 'JABON';
+    const isBajoPedido = esBajoPedido === true;
 
-    const producto = await prisma.producto.create({
-      data: {
-        nombre,
-        descripcion,
-        tipo: isJabon ? 'JABON' : 'VELA',
-        aroma: isJabon ? null : (aroma || null),
-        aromaId: isJabon ? null : (aromaId || null),
-        material: isJabon ? null : (material || null),
-        materialId: isJabon ? null : (materialId || null),
-        dimensiones: dimensiones ? String(dimensiones).trim() : null,
-        precio: parseFloat(String(precio)),
-        stock: parseInt(String(stock), 10),
-        url_imagen: url_imagen || '',
-        imagenes: Array.isArray(imagenes) ? imagenes : [],
-        activo: activo ?? true,
-        esBajoPedido: esBajoPedido ?? false,
-      },
+    // Validación de variaciones si no es bajo pedido
+    const rawVariaciones: VariacionInput[] = Array.isArray(variaciones) ? variaciones : [];
+    const validVariaciones = isBajoPedido
+      ? []
+      : rawVariaciones.filter((v) => v && typeof v.nombre === 'string' && v.nombre.trim() !== '' && typeof v.imagen === 'string' && v.imagen.trim() !== '');
+
+    const result = await prisma.$transaction(async (tx) => {
+      const producto = await tx.producto.create({
+        data: {
+          nombre,
+          descripcion,
+          tipo: isJabon ? 'JABON' : 'VELA',
+          aroma: isJabon ? null : (aroma || null),
+          aromaId: isJabon ? null : (aromaId || null),
+          material: isJabon ? null : (material || null),
+          materialId: isJabon ? null : (materialId || null),
+          dimensiones: dimensiones ? String(dimensiones).trim() : null,
+          precio: precio !== null && precio !== undefined && precio !== '' ? parseFloat(String(precio)) : null,
+          stock: parseInt(String(stock || 0), 10),
+          url_imagen: url_imagen || '',
+          imagenes: Array.isArray(imagenes) ? imagenes : [],
+          activo: activo ?? true,
+          esBajoPedido: isBajoPedido,
+          variaciones: validVariaciones.length > 0 ? {
+            create: validVariaciones.map((v) => ({
+              nombre: v.nombre.trim(),
+              imagen: v.imagen.trim(),
+              precio: v.precio !== null && v.precio !== undefined && v.precio !== '' ? parseFloat(String(v.precio)) : null,
+              activo: v.activo ?? true,
+            })),
+          } : undefined,
+        },
+        include: {
+          variaciones: {
+            orderBy: { createdAt: 'asc' },
+          },
+        },
+      });
+
+      return producto;
     });
-    return NextResponse.json(producto, { status: 201 });
+
+    return NextResponse.json(result, { status: 201 });
   } catch (error) {
-    console.error(error);
+    console.error('Error al crear producto:', error);
     return NextResponse.json({ error: 'Error al crear producto' }, { status: 500 });
   }
 }

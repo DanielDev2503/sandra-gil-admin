@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useEffect, useState } from 'react';
+import SafeImage from '@/components/SafeImage';
 import {
   Filter,
   ChevronLeft,
@@ -21,6 +22,8 @@ import {
   Check,
   ShieldCheck,
   Wind,
+  Layers,
+  ImageIcon,
 } from 'lucide-react';
 
 interface ItemPedido {
@@ -28,6 +31,9 @@ interface ItemPedido {
   cantidad: number;
   precio_unitario: number;
   aroma?: string | null;
+  variacion_id?: string | null;
+  variacion_nombre?: string | null;
+  variacion_imagen?: string | null;
   producto: { nombre: string; url_imagen: string };
 }
 
@@ -643,30 +649,73 @@ export default function OrdenesPage() {
 
               {/* Items */}
               <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Productos del Pedido</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+                  Productos del Pedido para Despacho
+                </p>
                 <div className="space-y-3">
-                  {selectedPedido.items.map((item) => (
-                    <div key={item.id} className="bg-white/3 border border-white/8 rounded-xl p-3 space-y-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="text-sm font-medium text-white leading-tight">{item.producto.nombre}</span>
-                        <span className="text-xs text-slate-400 whitespace-nowrap shrink-0">x{item.cantidad} · {formatCOP(item.precio_unitario)}</span>
+                  {selectedPedido.items.map((item) => {
+                    const itemImage = item.variacion_imagen || item.producto?.url_imagen;
+                    return (
+                      <div key={item.id} className="bg-white/3 border border-white/8 rounded-xl p-3 flex gap-3 items-center">
+                        {/* Thumbnail */}
+                        <div className="w-14 h-14 rounded-xl overflow-hidden bg-white/5 border border-white/10 shrink-0 relative">
+                          {itemImage ? (
+                            <SafeImage
+                              src={itemImage}
+                              alt={item.variacion_nombre || item.producto?.nombre || 'Producto'}
+                              width={56}
+                              height={56}
+                              className="object-cover w-full h-full"
+                              fallbackIcon={ImageIcon}
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-slate-600">
+                              <ShoppingBag className="w-5 h-5" />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Details */}
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="text-sm font-medium text-white leading-snug">
+                              {item.producto?.nombre || 'Producto sin nombre'}
+                            </span>
+                            <span className="text-xs font-semibold text-[#e8b86d] whitespace-nowrap shrink-0">
+                              {formatCOP(item.cantidad * item.precio_unitario)}
+                            </span>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            {/* Variation tag */}
+                            {item.variacion_nombre && (
+                              <div className="flex items-center gap-1">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                                  <Layers className="w-3 h-3 text-purple-400 shrink-0" />
+                                  Variación: {item.variacion_nombre}
+                                </span>
+                              </div>
+                            )}
+
+                            {/* Aroma tag */}
+                            {item.aroma ? (
+                              <div className="flex items-center gap-1">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-[#e8b86d]/15 text-[#e8b86d] border border-[#e8b86d]/30">
+                                  <Wind className="w-3 h-3 text-[#e8b86d] shrink-0" />
+                                  Aroma: {item.aroma}
+                                </span>
+                              </div>
+                            ) : null}
+
+                            {/* Quantity & Unit Price */}
+                            <span className="text-xs text-slate-400">
+                              Cant: <strong>{item.cantidad}</strong> ({formatCOP(item.precio_unitario)} c/u)
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      {item.aroma ? (
-                        <div className="flex items-center gap-1.5">
-                          <Wind className="w-3.5 h-3.5 text-[#e8b86d] shrink-0" />
-                          <span className="text-[11px] font-bold text-[#e8b86d] uppercase tracking-wider">Aroma:</span>
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-[#e8b86d]/15 text-[#e8b86d] border border-[#e8b86d]/30">
-                            {item.aroma}
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1.5">
-                          <Wind className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-                          <span className="text-[11px] text-slate-600">Sin aroma seleccionado</span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 

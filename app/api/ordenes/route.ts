@@ -42,6 +42,9 @@ export async function GET(request: Request) {
               cantidad: true,
               precio_unitario: true,
               aroma: true,
+              variacion_id: true,
+              variacion_nombre: true,
+              variacion_imagen: true,
               producto: {
                 select: { nombre: true, url_imagen: true },
               },

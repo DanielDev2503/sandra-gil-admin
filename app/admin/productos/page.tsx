@@ -6,6 +6,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import Image from 'next/image';
 import SafeImage from '@/components/SafeImage';
 import ImageUpload from '@/components/ImageUpload';
+import ProductVariationsManager, { VariacionItem } from '@/components/ProductVariationsManager';
 import { uploadProductImage, deleteProductImage } from '@/lib/storage';
 import {
   Plus,
@@ -22,6 +23,7 @@ import {
   ImageIcon,
   AlertCircle,
   Flame,
+  Layers,
 } from 'lucide-react';
 
 /* ─── Toast ─── */
@@ -38,6 +40,14 @@ interface Toast {
 
 type TipoProducto = 'VELA' | 'JABON';
 
+export interface VariacionProductoData {
+  id: string;
+  nombre: string;
+  imagen: string;
+  precio: number | null;
+  activo: boolean;
+}
+
 interface Producto {
   id: string;
   nombre: string;
@@ -52,6 +62,7 @@ interface Producto {
   url_imagen: string;
   imagenes: string[];
   activo: boolean;
+  variaciones?: VariacionProductoData[];
 }
 
 interface ProductoForm {
@@ -282,6 +293,7 @@ export default function ProductosPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ProductoForm>(EMPTY_FORM);
+  const [variacionesModal, setVariacionesModal] = useState<VariacionItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -333,6 +345,7 @@ export default function ProductosPage() {
   const openCreate = () => {
     setEditingId(null);
     setForm(EMPTY_FORM);
+    setVariacionesModal([]);
     setImagenesExistentes(['', '', '']);
     setImageFiles([null, null, null]);
     setImagePreviews(['', '', '']);
@@ -355,12 +368,21 @@ export default function ProductosPage() {
       aroma: p.aroma ?? '',
       material: p.material ?? '',
       dimensiones: p.dimensiones ?? '',
-      precio: p.precio,
+      precio: p.precio ?? 0,
       stock: p.stock,
       activo: p.activo,
       esBajoPedido: p.esBajoPedido,
       imagenes: existing,
     });
+    setVariacionesModal(
+      (p.variaciones || []).map((v) => ({
+        id: v.id,
+        nombre: v.nombre || '',
+        imagen: v.imagen || '',
+        precio: v.precio !== null && v.precio !== undefined ? v.precio : null,
+        activo: v.activo ?? true,
+      }))
+    );
     setImagenesExistentes(existing);
     setImageFiles([null, null, null]);
     setImagePreviews(existing);
@@ -445,6 +467,15 @@ export default function ProductosPage() {
       return;
     }
 
+    // Validar variaciones si no es bajo pedido
+    if (!form.esBajoPedido && variacionesModal.length > 0) {
+      const invalid = variacionesModal.find((v) => !v.nombre.trim() || !v.imagen.trim());
+      if (invalid) {
+        showToast('Cada variación debe tener obligatoriamente un Nombre y una Imagen.', 'error');
+        return;
+      }
+    }
+
     setSaving(true);
 
     // Step 1: Upload new File objects to Supabase API FIRST
@@ -493,6 +524,15 @@ export default function ProductosPage() {
       imagenes: imagenesFinales,
       activo: form.activo,
       esBajoPedido: form.esBajoPedido,
+      variaciones: form.esBajoPedido
+        ? []
+        : variacionesModal.map((v) => ({
+            id: v.id && !v.id.startsWith('temp-') ? v.id : undefined,
+            nombre: v.nombre.trim(),
+            imagen: v.imagen.trim(),
+            precio: v.precio !== null && v.precio !== undefined && v.precio !== '' ? parseFloat(String(v.precio)) : null,
+            activo: v.activo,
+          })),
     };
 
     try {
@@ -676,11 +716,19 @@ export default function ProductosPage() {
                         </div>
                         <div>
                           <p className="text-sm font-medium text-white">{p.nombre}</p>
-                          <div className="flex items-center gap-2">
-                            <p className="text-xs text-slate-500 line-clamp-1">{p.dimensiones}</p>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                            {p.dimensiones && (
+                              <p className="text-xs text-slate-500 line-clamp-1">{p.dimensiones}</p>
+                            )}
                             {p.esBajoPedido && (
                               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/20">
                                 Bajo Pedido
+                              </span>
+                            )}
+                            {!p.esBajoPedido && p.variaciones && p.variaciones.length > 0 && (
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[#e8b86d]/15 text-[#e8b86d] border border-[#e8b86d]/30 flex items-center gap-1">
+                                <Layers className="w-3 h-3" />
+                                {p.variaciones.length} {p.variaciones.length === 1 ? 'variación' : 'variaciones'}
                               </span>
                             )}
                           </div>
@@ -689,7 +737,9 @@ export default function ProductosPage() {
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-300">{p.aroma}</td>
                     <td className="px-6 py-4 text-sm text-slate-300">{p.material ?? <span className="text-slate-600">—</span>}</td>
-                    <td className="px-6 py-4 text-sm font-semibold text-[#e8b86d]">{formatCOP(p.precio)}</td>
+                    <td className="px-6 py-4 text-sm font-semibold text-[#e8b86d]">
+                      {p.precio !== null && p.precio !== undefined ? formatCOP(p.precio) : '—'}
+                    </td>
                     <td className="px-6 py-4">
                       <span className={`text-sm font-semibold ${p.stock < 5 ? 'text-red-400' : 'text-white'}`}>
                         {p.stock}
@@ -930,6 +980,17 @@ export default function ProductosPage() {
                     {form.esBajoPedido ? 'Bajo pedido' : 'Stock normal'}
                   </span>
                 </div>
+              </div>
+
+              {/* ─── Gestor de Variaciones de Producto ─── */}
+              <div className="pt-4 border-t border-white/10">
+                <ProductVariationsManager
+                  variaciones={variacionesModal}
+                  onChange={setVariacionesModal}
+                  basePrice={form.precio}
+                  esBajoPedido={form.esBajoPedido}
+                  disabled={saving}
+                />
               </div>
 
               <div className="flex justify-end gap-3 pt-2">

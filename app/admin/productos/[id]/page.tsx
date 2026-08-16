@@ -5,7 +5,10 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Loader2, Sparkles } from 'lucide-react';
+import { ArrowLeft, Loader2, Sparkles, AlertCircle } from 'lucide-react';
+import ProductVariationsManager, { VariacionItem } from '@/components/ProductVariationsManager';
+import ImageUpload from '@/components/ImageUpload';
+import { uploadProductImage } from '@/lib/storage';
 
 type TipoProducto = 'VELA' | 'JABON';
 
@@ -18,6 +21,7 @@ export default function EditarProductoPage({
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [aromas, setAromas] = useState<string[]>([]);
   const [materiales, setMateriales] = useState<string[]>([]);
 
@@ -34,6 +38,9 @@ export default function EditarProductoPage({
     esBajoPedido: false,
     url_imagen: '',
   });
+
+  const [variaciones, setVariaciones] = useState<VariacionItem[]>([]);
+  const [uploadingMainImage, setUploadingMainImage] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -56,15 +63,58 @@ export default function EditarProductoPage({
           stock: productoData.stock ?? 0,
           activo: productoData.activo ?? true,
           esBajoPedido: productoData.esBajoPedido ?? false,
-          url_imagen: productoData.url_imagen ?? '',
+          url_imagen: productoData.url_imagen ?? (productoData.imagenes?.[0] || ''),
         });
+
+        if (Array.isArray(productoData.variaciones)) {
+          setVariaciones(
+            productoData.variaciones.map((v: any) => ({
+              id: v.id,
+              nombre: v.nombre || '',
+              imagen: v.imagen || '',
+              precio: v.precio !== null && v.precio !== undefined ? v.precio : null,
+              activo: v.activo ?? true,
+            }))
+          );
+        }
       }
       setLoading(false);
     });
   }, [id]);
 
+  const handleMainImageUpload = async (file: File) => {
+    setUploadingMainImage(true);
+    setErrorMessage(null);
+    try {
+      const publicUrl = await uploadProductImage(file);
+      if (publicUrl) {
+        setForm((f) => ({ ...f, url_imagen: publicUrl }));
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Error al subir la imagen principal');
+    } finally {
+      setUploadingMainImage(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage(null);
+
+    if (!form.url_imagen.trim()) {
+      setErrorMessage('La imagen principal del producto es obligatoria.');
+      return;
+    }
+
+    // Validar variaciones si no es bajo pedido
+    if (!form.esBajoPedido && variaciones.length > 0) {
+      const invalid = variaciones.find((v) => !v.nombre.trim() || !v.imagen.trim());
+      if (invalid) {
+        setErrorMessage('Cada variación debe tener obligatoriamente un Nombre y una Imagen asignada.');
+        return;
+      }
+    }
+
     setSaving(true);
 
     const isJabon = form.tipo === 'JABON';
@@ -78,10 +128,19 @@ export default function EditarProductoPage({
       dimensiones: form.dimensiones ? form.dimensiones.trim() : null,
       precio: form.precio,
       stock: form.stock,
-      url_imagen: form.url_imagen || '',
-      imagenes: form.url_imagen ? [form.url_imagen] : [],
+      url_imagen: form.url_imagen.trim(),
+      imagenes: form.url_imagen ? [form.url_imagen.trim()] : [],
       activo: form.activo,
       esBajoPedido: form.esBajoPedido,
+      variaciones: form.esBajoPedido
+        ? []
+        : variaciones.map((v) => ({
+            id: v.id && !v.id.startsWith('temp-') ? v.id : undefined,
+            nombre: v.nombre.trim(),
+            imagen: v.imagen.trim(),
+            precio: v.precio !== null && v.precio !== undefined && v.precio !== '' ? parseFloat(String(v.precio)) : null,
+            activo: v.activo,
+          })),
     };
 
     try {
@@ -96,11 +155,11 @@ export default function EditarProductoPage({
         router.refresh();
       } else {
         const err = await res.json();
-        alert(err.error || 'Error al actualizar el producto');
+        setErrorMessage(err.error || 'Error al actualizar el producto');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Error al actualizar el producto');
+      setErrorMessage(err?.message || 'Error al actualizar el producto');
     } finally {
       setSaving(false);
     }
@@ -125,9 +184,16 @@ export default function EditarProductoPage({
         </Link>
         <div>
           <h1 className="text-2xl font-bold text-white">Editar Producto</h1>
-          <p className="text-xs text-slate-400">Actualizar información del producto en el catálogo</p>
+          <p className="text-xs text-slate-400">Actualizar información y variaciones del producto en el catálogo</p>
         </div>
       </div>
+
+      {errorMessage && (
+        <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-2xl text-sm text-red-400 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 shrink-0" />
+          <span>{errorMessage}</span>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="bg-[#1a1a2e] border border-white/10 rounded-2xl p-6 space-y-6 shadow-xl">
         {/* Selector de Tipo de Producto */}
@@ -215,7 +281,7 @@ export default function EditarProductoPage({
           )}
 
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Precio (COP) *</label>
+            <label className="block text-sm font-medium text-slate-300 mb-2">Precio Base (COP) *</label>
             <input
               required
               type="number"
@@ -248,15 +314,34 @@ export default function EditarProductoPage({
             />
           </div>
 
-          <div className="sm:col-span-2">
-            <label className="block text-sm font-medium text-slate-300 mb-2">URL Imagen Principal *</label>
-            <input
-              required
-              value={form.url_imagen}
-              onChange={(e) => setForm((f) => ({ ...f, url_imagen: e.target.value }))}
-              placeholder="https://..."
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all"
-            />
+          {/* Imagen Principal con Componente de Subida */}
+          <div className="sm:col-span-2 space-y-2">
+            <label className="block text-sm font-medium text-slate-300">
+              Imagen Principal del Producto *
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
+              <div className="max-w-[180px]">
+                <ImageUpload
+                  label="Principal *"
+                  imageUrl={form.url_imagen}
+                  isUploading={uploadingMainImage}
+                  onUpload={handleMainImageUpload}
+                  onDelete={form.url_imagen ? () => setForm((f) => ({ ...f, url_imagen: '' })) : undefined}
+                  isPrimary={true}
+                />
+              </div>
+              <div className="sm:col-span-2 space-y-2">
+                <p className="text-xs text-slate-400">
+                  Sube la foto destacada del producto o actualiza la URL. Esta será la portada en el catálogo principal.
+                </p>
+                <input
+                  value={form.url_imagen}
+                  onChange={(e) => setForm((f) => ({ ...f, url_imagen: e.target.value }))}
+                  placeholder="https://... o sube una imagen arriba"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -272,7 +357,7 @@ export default function EditarProductoPage({
         </div>
 
         {/* Toggles */}
-        <div className="flex flex-wrap items-center gap-6 pt-2">
+        <div className="flex flex-wrap items-center gap-6 pt-2 pb-2">
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -297,6 +382,17 @@ export default function EditarProductoPage({
               Bajo Pedido
             </span>
           </div>
+        </div>
+
+        {/* ─── Gestor de Variaciones de Producto ─── */}
+        <div className="pt-4 border-t border-white/10">
+          <ProductVariationsManager
+            variaciones={variaciones}
+            onChange={setVariaciones}
+            basePrice={form.precio}
+            esBajoPedido={form.esBajoPedido}
+            disabled={saving}
+          />
         </div>
 
         {/* Action Buttons */}
