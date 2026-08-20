@@ -2,10 +2,9 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase-server';
-import { applyWatermark } from '@/lib/watermark';
 
-const MAX_FILE_SIZE_BYTES = 3 * 1024 * 1024; // 3MB
-const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg', 'image/avif'];
 
 export async function POST(request: Request) {
   try {
@@ -24,70 +23,50 @@ export async function POST(request: Request) {
     if (!ALLOWED_MIME_TYPES.includes(rawType)) {
       return NextResponse.json(
         {
-          error: `Formato de imagen no permitido (${rawType || 'desconocido'}). Solo se admiten WebP, PNG y JPEG.`,
+          error: `Formato de imagen no permitido (${rawType || 'desconocido'}). Solo se admiten WebP, PNG, JPEG y AVIF.`,
         },
         { status: 400 }
       );
     }
 
-    // 2. Validar Tamaño Máximo (3MB)
+    // 2. Validar Tamaño Máximo (5MB)
     if (file.size > MAX_FILE_SIZE_BYTES) {
       const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
       return NextResponse.json(
         {
-          error: `El archivo es demasiado pesado (${sizeMb} MB). El límite máximo permitido es 3 MB.`,
+          error: `El archivo es demasiado pesado (${sizeMb} MB). El límite máximo permitido es 5 MB.`,
         },
         { status: 400 }
       );
     }
 
+    // 3. Convertir File a ArrayBuffer y Buffer nativo de Node.js
     const arrayBuffer = await file.arrayBuffer();
-    const originalBuffer = Buffer.from(arrayBuffer);
+    const buffer = Buffer.from(arrayBuffer);
 
-    // Validar buffer original
-    if (!originalBuffer || originalBuffer.length === 0) {
+    if (!buffer || buffer.length === 0) {
       return NextResponse.json(
         { error: 'El archivo recibido está vacío' },
         { status: 400 }
       );
     }
 
-    if (originalBuffer.length > MAX_FILE_SIZE_BYTES) {
-      return NextResponse.json(
-        { error: 'El archivo supera el tamaño máximo permitido de 3 MB.' },
-        { status: 400 }
-      );
-    }
-
-    // 3. Aplicar Marca de Agua (con fallback seguro en caso de error)
-    let watermarkedBuffer: Buffer = originalBuffer;
-    try {
-      const processed = await applyWatermark(originalBuffer);
-      if (processed && processed.length > 0) {
-        watermarkedBuffer = processed;
-      }
-    } catch (watermarkErr) {
-      console.warn('⚠️ No se pudo aplicar la marca de agua, usando buffer original:', watermarkErr);
-      watermarkedBuffer = originalBuffer;
-    }
-
-    // Determinar extensión y tipo de contenido final
+    // 4. Determinar extensión y tipo de contenido
     const contentType = rawType === 'image/jpg' ? 'image/jpeg' : rawType;
     let ext = 'png';
     if (contentType === 'image/webp') ext = 'webp';
     else if (contentType === 'image/jpeg') ext = 'jpg';
     else if (contentType === 'image/png') ext = 'png';
+    else if (contentType === 'image/avif') ext = 'avif';
 
     const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const filePath = `velas/${uniqueName}`;
 
-    // Convert Buffer to Web API Blob to prevent binary string corruption
-    const uploadBlob = new Blob([new Uint8Array(watermarkedBuffer)], { type: contentType });
-
+    // 5. Subida directa a Supabase Storage con cliente autenticado del servidor
     const supabase = createServerClient();
     const { error: uploadError } = await supabase.storage
       .from('productos')
-      .upload(filePath, uploadBlob, {
+      .upload(filePath, buffer, {
         contentType: contentType,
         upsert: true,
       });
@@ -100,6 +79,7 @@ export async function POST(request: Request) {
       );
     }
 
+    // 6. Obtener y retornar la URL pública
     const { data } = supabase.storage.from('productos').getPublicUrl(filePath);
 
     if (!data || !data.publicUrl) {
