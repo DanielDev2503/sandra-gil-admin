@@ -26,6 +26,8 @@ import {
   ImageIcon,
 } from 'lucide-react';
 
+import { useToast } from '@/components/ToastContext';
+
 interface ItemPedido {
   id: string;
   cantidad: number;
@@ -59,8 +61,10 @@ interface Pedido {
 const ESTADOS_ENVIO = [
   { value: '', label: 'Todos los envíos', color: 'text-slate-300' },
   { value: 'PENDING', label: 'Pendiente (PENDING)', color: 'text-yellow-400' },
-  { value: 'SHIPPED', label: 'Enviado (SHIPPED)', color: 'text-purple-400' },
+  { value: 'APPROVED', label: 'Aprobado / En preparación (APPROVED)', color: 'text-blue-400' },
+  { value: 'SHIPPED', label: 'Enviado / Despachado (SHIPPED)', color: 'text-purple-400' },
   { value: 'DELIVERED', label: 'Entregado (DELIVERED)', color: 'text-green-400' },
+  { value: 'DECLINED', label: 'Cancelado (DECLINED)', color: 'text-red-400' },
 ];
 
 const ESTADOS_PAGO = [
@@ -109,6 +113,7 @@ const estadoPagoBadge: Record<string, string> = {
 };
 
 export default function OrdenesPage() {
+  const toast = useToast();
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -132,35 +137,44 @@ export default function OrdenesPage() {
   const [editNotas, setEditNotas] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const handleCopy = (text: string) => {
+  const handleCopy = (text: string, label = 'Dato') => {
     if (!text) return;
     navigator.clipboard.writeText(text);
     setCopiedText(text);
+    toast.success(`${label} copiado al portapapeles`);
     setTimeout(() => setCopiedText(null), 2000);
   };
 
   const fetchPedidos = async () => {
     setLoading(true);
-    const params = new URLSearchParams({ page: String(page) });
-    if (busqueda.trim()) params.set('q', busqueda.trim());
-    if (filtroEstadoEnvio) params.set('estado_envio', filtroEstadoEnvio);
-    
-    if (filtroEstadoPago) {
-      const mappedPago = 
-        filtroEstadoPago === 'APPROVED' ? 'pagado' :
-        filtroEstadoPago === 'PENDING' ? 'pendiente' :
-        filtroEstadoPago === 'DECLINED' ? 'fallido' :
-        filtroEstadoPago === 'VOIDED' ? 'anulado' : filtroEstadoPago;
-      params.set('estado_pago', mappedPago);
+    try {
+      const params = new URLSearchParams({ page: String(page) });
+      if (busqueda.trim()) params.set('q', busqueda.trim());
+      if (filtroEstadoEnvio) params.set('estado_envio', filtroEstadoEnvio);
+      
+      if (filtroEstadoPago) {
+        const mappedPago = 
+          filtroEstadoPago === 'APPROVED' ? 'pagado' :
+          filtroEstadoPago === 'PENDING' ? 'pendiente' :
+          filtroEstadoPago === 'DECLINED' ? 'fallido' :
+          filtroEstadoPago === 'VOIDED' ? 'anulado' : filtroEstadoPago;
+        params.set('estado_pago', mappedPago);
+      }
+      
+      if (filtroCiudad) params.set('ciudad', filtroCiudad);
+      const r = await fetch(`/api/ordenes?${params}`);
+      if (!r.ok) {
+        throw new Error('No se pudieron cargar las órdenes');
+      }
+      const data = await r.json();
+      setPedidos(data.pedidos ?? []);
+      setTotal(data.total ?? 0);
+      setTotalPages(data.totalPages ?? 1);
+    } catch (err: any) {
+      toast.error(err?.message || 'Error de conexión al cargar órdenes');
+    } finally {
+      setLoading(false);
     }
-    
-    if (filtroCiudad) params.set('ciudad', filtroCiudad);
-    const r = await fetch(`/api/ordenes?${params}`);
-    const data = await r.json();
-    setPedidos(data.pedidos ?? []);
-    setTotal(data.total ?? 0);
-    setTotalPages(data.totalPages ?? 1);
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -182,19 +196,31 @@ export default function OrdenesPage() {
   const handleSaveOrden = async () => {
     if (!selectedPedido) return;
     setSaving(true);
-    await fetch(`/api/ordenes/${selectedPedido.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        estado_envio: editEstado,
-        numero_guia: editGuia,
-        transportadora: editTransportadora,
-        notas_admin: editNotas,
-      }),
-    });
-    setSaving(false);
-    setSelectedPedido(null);
-    fetchPedidos();
+    try {
+      const res = await fetch(`/api/ordenes/${selectedPedido.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          estado_envio: editEstado,
+          numero_guia: editGuia,
+          transportadora: editTransportadora,
+          notas_admin: editNotas,
+        }),
+      });
+
+      if (res.ok) {
+        toast.success('Pedido actualizado con éxito');
+        setSelectedPedido(null);
+        fetchPedidos();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || 'Error al actualizar el pedido');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Error de conexión al guardar el pedido');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleWhatsApp = () => {

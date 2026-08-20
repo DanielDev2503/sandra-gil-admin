@@ -76,6 +76,21 @@ export default function ProductVariationsManager({
 
   const handleFileUpload = async (index: number, file: File) => {
     setUploadError(null);
+
+    const allowedMime = ['image/png', 'image/jpeg', 'image/webp', 'image/jpg'];
+    const fileType = (file.type || '').toLowerCase();
+    if (!allowedMime.includes(fileType)) {
+      setUploadError(`Formato no válido (${fileType || 'desconocido'}). Solo se aceptan imágenes WebP, PNG y JPG.`);
+      return;
+    }
+
+    const maxBytes = 3 * 1024 * 1024; // 3MB
+    if (file.size > maxBytes) {
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
+      setUploadError(`La imagen supera el límite máximo de 3MB (${sizeMb} MB).`);
+      return;
+    }
+
     handleUpdateVariation(index, { _uploading: true });
 
     try {
@@ -268,7 +283,7 @@ export default function ProductVariationsManager({
                       <label className="cursor-pointer flex flex-col items-center justify-center w-full h-full p-3 text-center hover:bg-white/5 transition-colors">
                         <input
                           type="file"
-                          accept="image/*"
+                          accept="image/png,image/jpeg,image/webp,image/jpg"
                           className="hidden"
                           onChange={(e) => {
                             const f = e.target.files?.[0];

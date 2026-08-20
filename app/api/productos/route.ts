@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { crearProductoSchema } from '@/lib/validations/producto';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -36,20 +37,27 @@ export async function GET(request: Request) {
   }
 }
 
-interface VariacionInput {
-  nombre: string;
-  imagen: string;
-  precio?: number | string | null;
-  activo?: boolean;
-}
-
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+
+    // 1. Validación estricta de entrada con Zod
+    const validation = crearProductoSchema.safeParse(body);
+    if (!validation.success) {
+      const firstError = validation.error.issues[0]?.message || 'Datos del producto inválidos';
+      return NextResponse.json(
+        {
+          error: firstError,
+          details: validation.error.issues,
+        },
+        { status: 400 }
+      );
+    }
+
     const {
       nombre,
       descripcion,
-      tipo = 'VELA',
+      tipo,
       aroma,
       aromaId,
       material,
@@ -61,43 +69,38 @@ export async function POST(request: Request) {
       imagenes,
       activo,
       esBajoPedido,
-      variaciones = [],
-    } = body;
+      variaciones,
+    } = validation.data;
 
-    const isJabon = tipo === 'JABON';
-    const isBajoPedido = esBajoPedido === true;
-
-    // Validación de variaciones si no es bajo pedido
-    const rawVariaciones: VariacionInput[] = Array.isArray(variaciones) ? variaciones : [];
-    const validVariaciones = isBajoPedido
-      ? []
-      : rawVariaciones.filter((v) => v && typeof v.nombre === 'string' && v.nombre.trim() !== '' && typeof v.imagen === 'string' && v.imagen.trim() !== '');
-
+    // 2. Transacción atómica en PostgreSQL
     const result = await prisma.$transaction(async (tx) => {
       const producto = await tx.producto.create({
         data: {
           nombre,
           descripcion,
-          tipo: isJabon ? 'JABON' : 'VELA',
-          aroma: isJabon ? null : (aroma || null),
-          aromaId: isJabon ? null : (aromaId || null),
-          material: isJabon ? null : (material || null),
-          materialId: isJabon ? null : (materialId || null),
-          dimensiones: dimensiones ? String(dimensiones).trim() : null,
-          precio: precio !== null && precio !== undefined && precio !== '' ? parseFloat(String(precio)) : null,
-          stock: parseInt(String(stock || 0), 10),
-          url_imagen: url_imagen || '',
-          imagenes: Array.isArray(imagenes) ? imagenes : [],
-          activo: activo ?? true,
-          esBajoPedido: isBajoPedido,
-          variaciones: validVariaciones.length > 0 ? {
-            create: validVariaciones.map((v) => ({
-              nombre: v.nombre.trim(),
-              imagen: v.imagen.trim(),
-              precio: v.precio !== null && v.precio !== undefined && v.precio !== '' ? parseFloat(String(v.precio)) : null,
-              activo: v.activo ?? true,
-            })),
-          } : undefined,
+          tipo,
+          aroma,
+          aromaId,
+          material,
+          materialId,
+          dimensiones,
+          precio,
+          stock,
+          url_imagen,
+          imagenes,
+          activo,
+          esBajoPedido,
+          variaciones:
+            variaciones.length > 0
+              ? {
+                  create: variaciones.map((v) => ({
+                    nombre: v.nombre,
+                    imagen: v.imagen,
+                    precio: v.precio ?? null,
+                    activo: v.activo,
+                  })),
+                }
+              : undefined,
         },
         include: {
           variaciones: {
@@ -110,9 +113,11 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json(result, { status: 201 });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error al crear producto:', error);
-    return NextResponse.json({ error: 'Error al crear producto' }, { status: 500 });
+    return NextResponse.json(
+      { error: error?.message || 'Error interno al crear producto' },
+      { status: 500 }
+    );
   }
 }
-

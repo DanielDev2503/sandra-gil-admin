@@ -10,6 +10,8 @@ import ProductVariationsManager, { VariacionItem } from '@/components/ProductVar
 import ImageUpload from '@/components/ImageUpload';
 import { uploadProductImage } from '@/lib/storage';
 
+import { useToast } from '@/components/ToastContext';
+
 type TipoProducto = 'VELA' | 'JABON';
 
 export default function EditarProductoPage({
@@ -19,6 +21,7 @@ export default function EditarProductoPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -77,10 +80,12 @@ export default function EditarProductoPage({
             }))
           );
         }
+      } else if (productoData?.error) {
+        toast.error(productoData.error || 'No se pudo cargar el producto');
       }
       setLoading(false);
     });
-  }, [id]);
+  }, [id, toast]);
 
   const handleMainImageUpload = async (file: File) => {
     setUploadingMainImage(true);
@@ -89,9 +94,12 @@ export default function EditarProductoPage({
       const publicUrl = await uploadProductImage(file);
       if (publicUrl) {
         setForm((f) => ({ ...f, url_imagen: publicUrl }));
+        toast.success('Imagen principal actualizada');
       }
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Error al subir la imagen principal');
+      const msg = err?.message || 'Error al subir la imagen principal';
+      setErrorMessage(msg);
+      toast.error(msg);
     } finally {
       setUploadingMainImage(false);
     }
@@ -102,7 +110,9 @@ export default function EditarProductoPage({
     setErrorMessage(null);
 
     if (!form.url_imagen.trim()) {
-      setErrorMessage('La imagen principal del producto es obligatoria.');
+      const msg = 'La imagen principal del producto es obligatoria.';
+      setErrorMessage(msg);
+      toast.error(msg);
       return;
     }
 
@@ -110,7 +120,9 @@ export default function EditarProductoPage({
     if (!form.esBajoPedido && variaciones.length > 0) {
       const invalid = variaciones.find((v) => !v.nombre.trim() || !v.imagen.trim());
       if (invalid) {
-        setErrorMessage('Cada variación debe tener obligatoriamente un Nombre y una Imagen asignada.');
+        const msg = 'Cada variación debe tener obligatoriamente un Nombre y una Imagen asignada.';
+        setErrorMessage(msg);
+        toast.error(msg);
         return;
       }
     }
@@ -120,8 +132,8 @@ export default function EditarProductoPage({
     const isJabon = form.tipo === 'JABON';
 
     const payload = {
-      nombre: form.nombre,
-      descripcion: form.descripcion,
+      nombre: form.nombre.trim(),
+      descripcion: form.descripcion.trim(),
       tipo: form.tipo,
       aroma: isJabon ? null : (form.aroma || null),
       material: isJabon ? null : (form.material || null),
@@ -151,15 +163,20 @@ export default function EditarProductoPage({
       });
 
       if (res.ok) {
+        toast.success('¡Producto actualizado exitosamente!');
         router.push('/admin/productos');
         router.refresh();
       } else {
         const err = await res.json();
-        setErrorMessage(err.error || 'Error al actualizar el producto');
+        const msg = err.error || 'Error al actualizar el producto';
+        setErrorMessage(msg);
+        toast.error(msg);
       }
     } catch (err: any) {
       console.error(err);
-      setErrorMessage(err?.message || 'Error al actualizar el producto');
+      const msg = err?.message || 'Error de conexión al actualizar el producto';
+      setErrorMessage(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }

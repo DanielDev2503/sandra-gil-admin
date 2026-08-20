@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { productoBaseSchema } from '@/lib/validations/producto';
 
 export async function GET(
   _request: Request,
@@ -29,14 +30,6 @@ export async function GET(
   }
 }
 
-interface VariacionInput {
-  id?: string;
-  nombre: string;
-  imagen: string;
-  precio?: number | string | null;
-  activo?: boolean;
-}
-
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -44,10 +37,21 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
+
+    // 1. Validar con Zod
+    const validation = productoBaseSchema.safeParse(body);
+    if (!validation.success) {
+      const firstError = validation.error.issues[0]?.message || 'Datos del producto inválidos';
+      return NextResponse.json(
+        { error: firstError, details: validation.error.issues },
+        { status: 400 }
+      );
+    }
+
     const {
       nombre,
       descripcion,
-      tipo = 'VELA',
+      tipo,
       aroma,
       aromaId,
       material,
@@ -60,10 +64,16 @@ export async function PUT(
       activo,
       esBajoPedido,
       variaciones = [],
-    } = body;
+    } = validation.data;
 
     const isJabon = tipo === 'JABON';
     const isBajoPedido = esBajoPedido === true;
+
+    // Sincronización atómica de imágenes
+    let syncImagenes = Array.from(new Set([url_imagen, ...(imagenes || [])])).filter(Boolean);
+    if (syncImagenes.length === 0 && url_imagen) {
+      syncImagenes = [url_imagen];
+    }
 
     const result = await prisma.$transaction(async (tx) => {
       // 1. Actualizar datos base del producto
@@ -72,48 +82,39 @@ export async function PUT(
         data: {
           nombre,
           descripcion,
-          tipo: isJabon ? 'JABON' : 'VELA',
-          aroma: isJabon ? null : (aroma || null),
-          aromaId: isJabon ? null : (aromaId || null),
-          material: isJabon ? null : (material || null),
-          materialId: isJabon ? null : (materialId || null),
+          tipo,
+          aroma: isJabon ? null : aroma,
+          aromaId: isJabon ? null : aromaId,
+          material: isJabon ? null : material,
+          materialId: isJabon ? null : materialId,
           dimensiones: dimensiones ? String(dimensiones).trim() : null,
-          precio: precio !== null && precio !== undefined && precio !== '' ? parseFloat(String(precio)) : null,
-          stock: parseInt(String(stock || 0), 10),
+          precio,
+          stock,
           url_imagen,
-          imagenes: Array.isArray(imagenes) ? imagenes : [],
-          activo: activo ?? true,
-          esBajoPedido: isBajoPedido,
+          imagenes: syncImagenes,
+          activo,
+          esBajoPedido,
         },
       });
 
       // 2. Gestionar variaciones
       if (isBajoPedido) {
-        // Si el producto es marcado bajo pedido, eliminar cualquier variación existente
         await tx.variacionProducto.deleteMany({
           where: { productoId: id },
         });
       } else {
-        const rawVariaciones: VariacionInput[] = Array.isArray(variaciones) ? variaciones : [];
-        const validVariaciones = rawVariaciones.filter(
-          (v) => v && typeof v.nombre === 'string' && v.nombre.trim() !== '' && typeof v.imagen === 'string' && v.imagen.trim() !== ''
+        const validVariaciones = variaciones.filter(
+          (v) => v.nombre.trim() !== '' && v.imagen.trim() !== ''
         );
 
-        // Obtener variaciones actuales en la base de datos
         const existingVariaciones = await tx.variacionProducto.findMany({
           where: { productoId: id },
           select: { id: true },
         });
         const existingIds = new Set(existingVariaciones.map((v) => v.id));
-
         const incomingIdsToKeep = new Set<string>();
 
-        // Actualizar existentes y crear nuevas
         for (const v of validVariaciones) {
-          const parsedPrice = v.precio !== null && v.precio !== undefined && v.precio !== ''
-            ? parseFloat(String(v.precio))
-            : null;
-
           if (v.id && existingIds.has(v.id)) {
             incomingIdsToKeep.add(v.id);
             await tx.variacionProducto.update({
@@ -121,8 +122,8 @@ export async function PUT(
               data: {
                 nombre: v.nombre.trim(),
                 imagen: v.imagen.trim(),
-                precio: parsedPrice,
-                activo: v.activo ?? true,
+                precio: v.precio ?? null,
+                activo: v.activo,
               },
             });
           } else {
@@ -131,15 +132,14 @@ export async function PUT(
                 productoId: id,
                 nombre: v.nombre.trim(),
                 imagen: v.imagen.trim(),
-                precio: parsedPrice,
-                activo: v.activo ?? true,
+                precio: v.precio ?? null,
+                activo: v.activo,
               },
             });
             incomingIdsToKeep.add(created.id);
           }
         }
 
-        // Eliminar variaciones que ya no están en la lista
         const toDeleteIds = existingVariaciones
           .map((v) => v.id)
           .filter((vId) => !incomingIdsToKeep.has(vId));
@@ -151,7 +151,6 @@ export async function PUT(
         }
       }
 
-      // Retornar producto con variaciones sincronizadas
       return tx.producto.findUnique({
         where: { id },
         include: {
@@ -163,9 +162,12 @@ export async function PUT(
     });
 
     return NextResponse.json(result);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error al actualizar producto:', error);
-    return NextResponse.json({ error: 'Error al actualizar producto' }, { status: 500 });
+    return NextResponse.json(
+      { error: error?.message || 'Error interno al actualizar producto' },
+      { status: 500 }
+    );
   }
 }
 
@@ -177,8 +179,11 @@ export async function DELETE(
     const { id } = await params;
     await prisma.producto.delete({ where: { id } });
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error al eliminar producto:', error);
-    return NextResponse.json({ error: 'Error al eliminar producto' }, { status: 500 });
+    return NextResponse.json(
+      { error: error?.message || 'Error al eliminar producto' },
+      { status: 500 }
+    );
   }
 }

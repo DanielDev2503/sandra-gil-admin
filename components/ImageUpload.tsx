@@ -2,7 +2,10 @@
 
 import { useState } from 'react';
 import SafeImage from './SafeImage';
-import { Camera, Trash2, Upload, Loader2, ImageIcon } from 'lucide-react';
+import { Camera, Trash2, Upload, Loader2, ImageIcon, AlertCircle } from 'lucide-react';
+
+const MAX_SIZE_BYTES = 3 * 1024 * 1024; // 3MB
+const ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/jpg'];
 
 interface ImageUploadProps {
   label: string;
@@ -10,6 +13,7 @@ interface ImageUploadProps {
   isUploading?: boolean;
   onUpload: (file: File) => void;
   onDelete?: () => void;
+  onError?: (message: string) => void;
   isPrimary?: boolean;
 }
 
@@ -19,22 +23,46 @@ export default function ImageUpload({
   isUploading = false,
   onUpload,
   onDelete,
+  onError,
   isPrimary = false,
 }: ImageUploadProps) {
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setLocalError(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset input to allow selecting the same file again if needed
+    e.target.value = '';
+
+    const fileType = (file.type || '').toLowerCase();
+    if (!ALLOWED_MIME_TYPES.includes(fileType)) {
+      const msg = `Formato no válido (${fileType || 'desconocido'}). Solo se aceptan imágenes WebP, PNG y JPG.`;
+      setLocalError(msg);
+      onError?.(msg);
+      return;
+    }
+
+    if (file.size > MAX_SIZE_BYTES) {
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
+      const msg = `La imagen supera el límite de 3MB (${sizeMb} MB).`;
+      setLocalError(msg);
+      onError?.(msg);
+      return;
+    }
+
+    onUpload(file);
+  };
+
   return (
-    <div className="relative group">
+    <div className="relative group space-y-1">
       <label className="cursor-pointer block">
         <input
           type="file"
-          accept="image/*"
+          accept="image/png,image/jpeg,image/webp,image/jpg"
           className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) {
-              onUpload(file);
-              e.target.value = '';
-            }
-          }}
+          onChange={handleFileChange}
         />
 
         {imageUrl ? (
@@ -112,6 +140,13 @@ export default function ImageUpload({
           </div>
         )}
       </label>
+
+      {localError && (
+        <div className="flex items-center gap-1.5 text-[11px] text-rose-400 font-medium px-1">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+          <span>{localError}</span>
+        </div>
+      )}
 
       {isUploading && imageUrl && (
         <div className="absolute inset-0 bg-black/70 rounded-xl flex items-center justify-center pointer-events-none">

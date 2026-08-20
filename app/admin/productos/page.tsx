@@ -26,17 +26,7 @@ import {
   Layers,
 } from 'lucide-react';
 
-/* ─── Toast ─── */
-
-type ToastType = 'success' | 'error';
-
-interface Toast {
-  id: number;
-  message: string;
-  type: ToastType;
-}
-
-/* ─── Types ─── */
+import { useToast } from '@/components/ToastContext';
 
 type TipoProducto = 'VELA' | 'JABON';
 
@@ -117,6 +107,7 @@ const DEFAULT_MATERIALES = [
 
 
 export default function ProductosPage() {
+  const { showToast } = useToast();
   const [productos, setProductos] = useState<Producto[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -296,7 +287,6 @@ export default function ProductosPage() {
   const [variacionesModal, setVariacionesModal] = useState<VariacionItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-  const [toasts, setToasts] = useState<Toast[]>([]);
   
   // Separated Image state for form:
   // 1. Existing Supabase URLs
@@ -307,16 +297,6 @@ export default function ProductosPage() {
   const [imagePreviews, setImagePreviews] = useState<[string, string, string]>(['', '', '']);
   // Track old image URLs to delete ONLY after successful save
   const [pendingDeleteUrls, setPendingDeleteUrls] = useState<string[]>([]);
-
-  /* ─── Toast helpers ─── */
-
-  const showToast = useCallback((message: string, type: ToastType = 'success') => {
-    const id = Date.now();
-    setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500);
-  }, []);
-
-  const dismissToast = (id: number) => setToasts((prev) => prev.filter((t) => t.id !== id));
 
   /* ─── Data fetching ─── */
 
@@ -1181,35 +1161,6 @@ export default function ProductosPage() {
         </div>
       )}
 
-      {/* ─── Toast Container ─── */}
-      <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-2 pointer-events-none">
-        {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            className={`flex items-center gap-3 px-4 py-3.5 rounded-xl shadow-2xl border pointer-events-auto
-              backdrop-blur-md text-sm font-medium min-w-[280px] max-w-sm
-              transition-all duration-300 ease-out
-              ${
-                toast.type === 'success'
-                  ? 'bg-[#0f2a1a]/90 border-green-500/30 text-green-300'
-                  : 'bg-[#2a0f0f]/90 border-red-500/30 text-red-300'
-              }`}
-          >
-            {toast.type === 'success' ? (
-              <CheckCircle className="w-4 h-4 shrink-0 text-green-400" />
-            ) : (
-              <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
-            )}
-            <span className="flex-1">{toast.message}</span>
-            <button
-              onClick={() => dismissToast(toast.id)}
-              className="p-0.5 opacity-60 hover:opacity-100 transition-opacity"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
