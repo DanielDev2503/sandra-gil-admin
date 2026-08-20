@@ -1,10 +1,18 @@
+import { applyClientWatermark } from './watermark-client';
+
 /**
  * Sube una imagen al bucket 'productos' de Supabase Storage.
+ * Aplica automáticamente la marca de agua en el navegador de forma fluida y sin dependencias nativas.
  * Retorna la URL pública del archivo subido.
  */
 export async function uploadProductImage(file: File): Promise<string> {
+  // Aplicar marca de agua en el cliente de forma segura
+  const processedFile = typeof window !== 'undefined'
+    ? await applyClientWatermark(file)
+    : file;
+
   const formData = new FormData();
-  formData.append('file', file);
+  formData.append('file', processedFile);
 
   const response = await fetch('/api/productos/upload', {
     method: 'POST',
