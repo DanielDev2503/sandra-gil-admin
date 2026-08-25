@@ -119,3 +119,17 @@ model Resena {
   comentario  String
   creado_en   DateTime @default(now())
 }
+
+model FAQ {
+  id        String   @id @default(uuid())
+  pregunta  String   @db.Text
+  respuesta String   @db.Text
+  categoria String   @default("General")
+  orden     Int      @default(0)
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([activo, orden])
+  @@index([categoria])
+}

@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Package,
   ShoppingBag,
+  HelpCircle,
   Flame,
   LogOut,
   ChevronLeft,
@@ -20,6 +21,7 @@ const navItems = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/admin/productos', label: 'Productos', icon: Package },
   { href: '/admin/ordenes', label: 'Órdenes', icon: ShoppingBag },
+  { href: '/admin/faq', label: 'Preguntas Frecuentes', icon: HelpCircle },
 ];
 
 export default function Sidebar() {
