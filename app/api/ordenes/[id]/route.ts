@@ -21,7 +21,7 @@ export async function PUT(
       );
     }
 
-    const { estado_envio, numero_guia, notas_admin } = validation.data;
+    const { estado_envio, numero_guia, transportadora, notas_admin } = validation.data;
 
     const dataToUpdate: {
       estado_envio?: string;
@@ -32,9 +32,21 @@ export async function PUT(
     if (estado_envio) {
       dataToUpdate.estado_envio = estado_envio;
     }
-    if (numero_guia !== undefined) {
-      dataToUpdate.numero_guia = numero_guia;
+
+    if (numero_guia !== undefined || transportadora !== undefined) {
+      if (numero_guia && transportadora) {
+        if (numero_guia.toLowerCase().includes(transportadora.toLowerCase())) {
+          dataToUpdate.numero_guia = numero_guia;
+        } else {
+          dataToUpdate.numero_guia = `${transportadora} - ${numero_guia}`;
+        }
+      } else if (numero_guia) {
+        dataToUpdate.numero_guia = numero_guia;
+      } else {
+        dataToUpdate.numero_guia = null;
+      }
     }
+
     if (notas_admin !== undefined) {
       dataToUpdate.notas_admin = notas_admin;
     }

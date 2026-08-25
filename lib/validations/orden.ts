@@ -15,6 +15,12 @@ export const actualizarOrdenSchema = z.object({
     .nullable()
     .optional()
     .transform((val) => (val && val.trim().length > 0 ? val.trim() : null)),
+  transportadora: z
+    .string()
+    .trim()
+    .nullable()
+    .optional()
+    .transform((val) => (val && val.trim().length > 0 ? val.trim() : null)),
   notas_admin: z
     .string()
     .trim()
