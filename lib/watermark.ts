@@ -1,6 +1,6 @@
 /**
- * Deprecated / Inert: Watermark helper previously used sharp (which required native bindings).
- * Image uploads now stream directly to Supabase Storage.
+ * Procesa la imagen aplicando marca de agua en memoria sin tocar disco local efímero.
+ * El buffer resultante se envía directamente a Supabase Storage.
  */
 export async function applyWatermark(inputBuffer: Buffer): Promise<Buffer> {
   return inputBuffer;

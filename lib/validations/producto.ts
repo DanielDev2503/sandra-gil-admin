@@ -29,6 +29,11 @@ export const productoBaseSchema = z.object({
     .trim()
     .min(2, 'El nombre debe tener al menos 2 caracteres')
     .max(150, 'El nombre no puede exceder 150 caracteres'),
+  slug: z
+    .string()
+    .trim()
+    .min(3, 'El slug debe tener al menos 3 caracteres')
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Formato de slug inválido (use minúsculas y guiones)'),
   descripcion: z
     .string()
     .trim()

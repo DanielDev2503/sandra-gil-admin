@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase-server';
+import { applyWatermark } from '@/lib/watermark';
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg', 'image/avif'];
@@ -62,13 +63,16 @@ export async function POST(request: Request) {
     const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const filePath = `velas/${uniqueName}`;
 
-    // 5. Subida directa a Supabase Storage con cliente autenticado del servidor
+    // 5. Procesar imagen en memoria si aplica marca de agua del servidor
+    const fileBuffer = await applyWatermark(buffer);
+
+    // 6. Subida directa a Supabase Storage con cliente autenticado del servidor
     const supabase = createServerClient();
     const { error: uploadError } = await supabase.storage
       .from('productos')
-      .upload(filePath, buffer, {
+      .upload(filePath, fileBuffer, {
         contentType: contentType,
-        upsert: true,
+        upsert: false,
       });
 
     if (uploadError) {
@@ -79,17 +83,19 @@ export async function POST(request: Request) {
       );
     }
 
-    // 6. Obtener y retornar la URL pública
-    const { data } = supabase.storage.from('productos').getPublicUrl(filePath);
+    // 7. Obtener y retornar la URL pública
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from('productos').getPublicUrl(filePath);
 
-    if (!data || !data.publicUrl) {
+    if (!publicUrl) {
       return NextResponse.json(
         { error: 'No se pudo obtener la URL pública de la imagen en Supabase' },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ publicUrl: data.publicUrl });
+    return NextResponse.json({ publicUrl });
   } catch (error: any) {
     console.error('Error procesando subida de imagen:', error);
     return NextResponse.json(

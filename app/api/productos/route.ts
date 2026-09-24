@@ -1,8 +1,10 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/db';
 import { crearProductoSchema } from '@/lib/validations/producto';
+import { generateSlug } from '@/lib/slug';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -41,6 +43,13 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
+    // Autogenerar slug a partir del nombre si no viene presente
+    if (!body.slug && body.nombre) {
+      body.slug = generateSlug(body.nombre);
+    } else if (body.slug) {
+      body.slug = generateSlug(body.slug);
+    }
+
     // 1. Validación estricta de entrada con Zod
     const validation = crearProductoSchema.safeParse(body);
     if (!validation.success) {
@@ -56,6 +65,7 @@ export async function POST(request: Request) {
 
     const {
       nombre,
+      slug,
       descripcion,
       tipo,
       aroma,
@@ -77,6 +87,7 @@ export async function POST(request: Request) {
       const producto = await tx.producto.create({
         data: {
           nombre,
+          slug,
           descripcion,
           tipo,
           aroma,
@@ -112,9 +123,33 @@ export async function POST(request: Request) {
       return producto;
     });
 
+    // 3. Disparar revalidación hacia la tienda pública y caché local
+    const storeUrl = process.env.NEXT_PUBLIC_STORE_URL || 'https://sandragilvelas.com';
+    const secret = process.env.REVALIDATION_SECRET;
+
+    if (storeUrl && secret) {
+      fetch(`${storeUrl}/api/revalidate?secret=${secret}&path=/catalogo`, { method: 'POST' }).catch((err) =>
+        console.error('Error notificando revalidación a tienda pública:', err)
+      );
+    }
+    revalidatePath('/catalogo');
+    revalidatePath('/admin/productos');
+
     return NextResponse.json(result, { status: 201 });
   } catch (error: any) {
     console.error('Error al crear producto:', error);
+
+    // Manejar colisión de clave única de Prisma P2002 para slug
+    if (error?.code === 'P2002') {
+      const targetStr = JSON.stringify(error?.meta?.target || '');
+      if (targetStr.includes('slug') || error?.message?.includes('slug')) {
+        return NextResponse.json(
+          { error: 'El slug ya está en uso por otro producto' },
+          { status: 409 }
+        );
+      }
+    }
+
     return NextResponse.json(
       { error: error?.message || 'Error interno al crear producto' },
       { status: 500 }

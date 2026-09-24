@@ -9,6 +9,8 @@ import { ArrowLeft, Loader2, Sparkles, AlertCircle } from 'lucide-react';
 import ProductVariationsManager, { VariacionItem } from '@/components/ProductVariationsManager';
 import ImageUpload from '@/components/ImageUpload';
 import { uploadProductImage } from '@/lib/storage';
+import { generateSlug } from '@/lib/slug';
+import { MATERIALES_OFICIALES, AROMAS_OFICIALES } from '@/lib/taxonomies';
 
 import { useToast } from '@/components/ToastContext';
 
@@ -19,11 +21,12 @@ export default function NuevoProductoPage() {
   const toast = useToast();
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [aromas, setAromas] = useState<string[]>([]);
-  const [materiales, setMateriales] = useState<string[]>([]);
+  const [aromas, setAromas] = useState<string[]>([...AROMAS_OFICIALES]);
+  const [isSlugManual, setIsSlugManual] = useState(false);
 
   const [form, setForm] = useState({
     nombre: '',
+    slug: '',
     descripcion: '',
     tipo: 'VELA' as TipoProducto,
     aroma: '',
@@ -43,14 +46,10 @@ export default function NuevoProductoPage() {
     fetch('/api/admin/aromas')
       .then((r) => r.json())
       .then((data) => {
-        if (Array.isArray(data)) setAromas(data.map((a: { nombre: string }) => a.nombre));
-      })
-      .catch(console.error);
-
-    fetch('/api/admin/materiales')
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) setMateriales(data.map((m: { nombre: string }) => m.nombre));
+        if (Array.isArray(data)) {
+          const fetched = data.map((a: { nombre: string }) => a.nombre);
+          setAromas(Array.from(new Set([...AROMAS_OFICIALES, ...fetched])));
+        }
       })
       .catch(console.error);
   }, []);
@@ -101,6 +100,7 @@ export default function NuevoProductoPage() {
 
     const payload = {
       nombre: form.nombre.trim(),
+      slug: form.slug.trim() || generateSlug(form.nombre.trim()),
       descripcion: form.descripcion.trim(),
       tipo: form.tipo,
       aroma: isJabon ? null : (form.aroma || null),
@@ -210,10 +210,45 @@ export default function NuevoProductoPage() {
             <input
               required
               value={form.nombre}
-              onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
+              onChange={(e) => {
+                const nombre = e.target.value;
+                setForm((f) => ({
+                  ...f,
+                  nombre,
+                  slug: isSlugManual ? f.slug : generateSlug(nombre),
+                }));
+              }}
               placeholder="ej: Vela Botánica Lavanda o Jabón de Avena & Miel"
               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all"
             />
+          </div>
+
+          {/* Campo Slug Semántico */}
+          <div className="sm:col-span-2">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-sm font-medium text-slate-300">
+                Slug Semántico (URL del Producto) *
+              </label>
+              <span className="text-xs text-[#e8b86d]/80 font-medium">SEO Optimizado</span>
+            </div>
+            <div className="flex items-center bg-white/5 border border-white/10 rounded-xl px-4 py-3 focus-within:ring-2 focus-within:ring-[#e8b86d]/30 focus-within:border-[#e8b86d]/50 transition-all">
+              <span className="text-xs text-slate-500 font-mono select-none mr-2 hidden sm:inline">
+                sandragilvelas.com/catalogo/
+              </span>
+              <input
+                required
+                value={form.slug}
+                onChange={(e) => {
+                  setIsSlugManual(true);
+                  setForm((f) => ({ ...f, slug: generateSlug(e.target.value) }));
+                }}
+                placeholder="ej: vela-botanica-lavanda"
+                className="w-full bg-transparent text-white font-mono text-xs sm:text-sm placeholder-slate-600 focus:outline-none"
+              />
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Autogenerado automáticamente desde el nombre. Puedes editarlo para personalizar palabras clave SEO (minúsculas y guiones).
+            </p>
           </div>
 
           {/* Conditional Aroma & Material */}
@@ -225,7 +260,7 @@ export default function NuevoProductoPage() {
                   required
                   value={form.aroma}
                   onChange={(e) => setForm((f) => ({ ...f, aroma: e.target.value }))}
-                  className="w-full bg-[#1a1a2e] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all"
+                  className="w-full bg-[#1a1a2e] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all cursor-pointer"
                 >
                   <option value="">Seleccionar aroma...</option>
                   {aromas.map((a) => (
@@ -242,13 +277,13 @@ export default function NuevoProductoPage() {
                 <select
                   value={form.material}
                   onChange={(e) => setForm((f) => ({ ...f, material: e.target.value }))}
-                  className="w-full bg-[#1a1a2e] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all"
+                  className="w-full bg-[#1a1a2e] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#e8b86d]/30 transition-all cursor-pointer"
                 >
                   <option value="">Seleccionar material...</option>
-                  {materiales.map((m) => (
+                  {MATERIALES_OFICIALES.map((m) => (
                     <option key={m} value={m}>{m}</option>
                   ))}
-                  {form.material && !materiales.includes(form.material) && (
+                  {form.material && !MATERIALES_OFICIALES.includes(form.material as any) && (
                     <option value={form.material}>{form.material}</option>
                   )}
                 </select>

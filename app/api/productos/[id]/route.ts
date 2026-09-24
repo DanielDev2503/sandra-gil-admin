@@ -1,8 +1,10 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/db';
 import { productoBaseSchema } from '@/lib/validations/producto';
+import { generateSlug } from '@/lib/slug';
 
 export async function GET(
   _request: Request,
@@ -38,6 +40,13 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
 
+    // Autogenerar slug si no viene o sanitizarlo
+    if (!body.slug && body.nombre) {
+      body.slug = generateSlug(body.nombre);
+    } else if (body.slug) {
+      body.slug = generateSlug(body.slug);
+    }
+
     // 1. Validar con Zod
     const validation = productoBaseSchema.safeParse(body);
     if (!validation.success) {
@@ -50,6 +59,7 @@ export async function PUT(
 
     const {
       nombre,
+      slug,
       descripcion,
       tipo,
       aroma,
@@ -81,6 +91,7 @@ export async function PUT(
         where: { id },
         data: {
           nombre,
+          slug,
           descripcion,
           tipo,
           aroma: isJabon ? null : aroma,
@@ -161,9 +172,33 @@ export async function PUT(
       });
     });
 
+    // 3. Disparar revalidación hacia la tienda pública y caché local
+    const storeUrl = process.env.NEXT_PUBLIC_STORE_URL || 'https://sandragilvelas.com';
+    const secret = process.env.REVALIDATION_SECRET;
+
+    if (storeUrl && secret) {
+      fetch(`${storeUrl}/api/revalidate?secret=${secret}&path=/catalogo`, { method: 'POST' }).catch((err) =>
+        console.error('Error notificando revalidación a tienda pública:', err)
+      );
+    }
+    revalidatePath('/catalogo');
+    revalidatePath('/admin/productos');
+
     return NextResponse.json(result);
   } catch (error: any) {
     console.error('Error al actualizar producto:', error);
+
+    // Manejar colisión de clave única de Prisma P2002 para slug
+    if (error?.code === 'P2002') {
+      const targetStr = JSON.stringify(error?.meta?.target || '');
+      if (targetStr.includes('slug') || error?.message?.includes('slug')) {
+        return NextResponse.json(
+          { error: 'El slug ya está en uso por otro producto' },
+          { status: 409 }
+        );
+      }
+    }
+
     return NextResponse.json(
       { error: error?.message || 'Error interno al actualizar producto' },
       { status: 500 }
@@ -178,6 +213,19 @@ export async function DELETE(
   try {
     const { id } = await params;
     await prisma.producto.delete({ where: { id } });
+
+    // Disparar revalidación hacia la tienda pública y caché local
+    const storeUrl = process.env.NEXT_PUBLIC_STORE_URL || 'https://sandragilvelas.com';
+    const secret = process.env.REVALIDATION_SECRET;
+
+    if (storeUrl && secret) {
+      fetch(`${storeUrl}/api/revalidate?secret=${secret}&path=/catalogo`, { method: 'POST' }).catch((err) =>
+        console.error('Error notificando revalidación a tienda pública:', err)
+      );
+    }
+    revalidatePath('/catalogo');
+    revalidatePath('/admin/productos');
+
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('Error al eliminar producto:', error);

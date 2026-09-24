@@ -7,8 +7,6 @@ import Link from 'next/link';
 import {
   TrendingUp,
   ShoppingBag,
-  Package,
-  ArrowRight,
   AlertCircle,
   Calendar,
   RefreshCw,
@@ -16,7 +14,6 @@ import {
   Truck,
   MapPin,
   Sparkles,
-  Layers,
   ChevronRight,
 } from 'lucide-react';
 import {
@@ -78,11 +75,6 @@ const PAYMENT_LABELS: Record<string, string> = {
   VOIDED: 'Anulado',
 };
 
-const GEO_COLORS: Record<string, string> = {
-  'Bogotá D.C.': '#e8b86d',
-  'Sabana de Bogotá': '#3b82f6',
-  'Otras Ciudades': '#8b5cf6',
-};
 
 const PIE_SERIES_COLORS = [
   '#e8b86d',
@@ -203,7 +195,7 @@ function DashboardSkeleton() {
   );
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 function CustomTooltipVentas({ active, payload, label }: any) {
   if (!active || !payload?.length || !payload[0]) return null;
   const monto = payload[0]?.value ?? 0;
@@ -244,7 +236,38 @@ function CustomTooltipBar({ active, payload, label }: any) {
     </div>
   );
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
+
+
+function calculatePresetDates(preset: PresetType): { from: string; to: string } {
+  const now = new Date();
+  const todayStr = formatDateString(now);
+
+  if (preset === 'hoy') {
+    return { from: todayStr, to: todayStr };
+  }
+  if (preset === '7dias') {
+    const d = new Date(now);
+    d.setDate(d.getDate() - 6);
+    return { from: formatDateString(d), to: todayStr };
+  }
+  if (preset === '30dias') {
+    const d = new Date(now);
+    d.setDate(d.getDate() - 29);
+    return { from: formatDateString(d), to: todayStr };
+  }
+  if (preset === 'mes') {
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { from: formatDateString(startOfMonth), to: todayStr };
+  }
+  if (preset === 'ano') {
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
+    return { from: formatDateString(startOfYear), to: todayStr };
+  }
+  if (preset === 'todo') {
+    return { from: 'all', to: todayStr };
+  }
+  return { from: todayStr, to: todayStr };
+}
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardApiResponse | null>(null);
@@ -254,106 +277,68 @@ export default function DashboardPage() {
 
   // Date Range States (Default: Last 30 days)
   const [activePreset, setActivePreset] = useState<PresetType>('30dias');
-  const [fechaInicio, setFechaInicio] = useState<string>(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 29);
-    return formatDateString(d);
-  });
-  const [fechaFin, setFechaFin] = useState<string>(() => {
-    return formatDateString(new Date());
-  });
+  const [dateRange, setDateRange] = useState<{ from: string; to: string }>(() =>
+    calculatePresetDates('30dias')
+  );
 
-  const calculateDatesForPreset = useCallback((preset: PresetType) => {
-    const now = new Date();
-    const todayStr = formatDateString(now);
-
-    if (preset === 'hoy') {
-      return { from: todayStr, to: todayStr };
-    }
-    if (preset === '7dias') {
-      const d = new Date(now);
-      d.setDate(d.getDate() - 6);
-      return { from: formatDateString(d), to: todayStr };
-    }
-    if (preset === '30dias') {
-      const d = new Date(now);
-      d.setDate(d.getDate() - 29);
-      return { from: formatDateString(d), to: todayStr };
-    }
-    if (preset === 'mes') {
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      return { from: formatDateString(startOfMonth), to: todayStr };
-    }
-    if (preset === 'ano') {
-      const startOfYear = new Date(now.getFullYear(), 0, 1);
-      return { from: formatDateString(startOfYear), to: todayStr };
-    }
-    if (preset === 'todo') {
-      return { from: 'all', to: todayStr };
-    }
-    return { from: fechaInicio, to: fechaFin };
-  }, [fechaInicio, fechaFin]);
-
-  const fetchMetrics = useCallback(async (from: string, to: string, isManualRefresh = false) => {
-    if (isManualRefresh) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
-    setError(null);
-
-    try {
-      const params = new URLSearchParams();
-      if (from) params.set('from', from);
-      if (to) params.set('to', to);
-
-      const res = await fetch(`/api/dashboard?${params.toString()}`);
-      if (!res.ok) {
-        throw new Error(`Error del servidor (${res.status})`);
+  const fetchDashboardData = useCallback(
+    async (rangeOverride?: { from: string; to: string }, isManualRefresh = false) => {
+      const range = rangeOverride || dateRange;
+      if (isManualRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
       }
-      const json: DashboardApiResponse = await res.json();
-      setData(json);
-      if (json.error) {
-        setError(json.error);
+      setError(null);
+
+      try {
+        const params = new URLSearchParams();
+        if (range.from) params.set('from', range.from);
+        if (range.to) params.set('to', range.to);
+
+        const res = await fetch(`/api/dashboard?${params.toString()}`);
+        if (!res.ok) {
+          throw new Error(`Error del servidor (${res.status})`);
+        }
+        const json: DashboardApiResponse = await res.json();
+        setData(json);
+        if (json.error) {
+          setError(json.error);
+        }
+      } catch (err: any) {
+        console.error('Error fetching dashboard data:', err);
+        setError(err?.message || 'No se pudieron obtener las métricas del servidor.');
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-    } catch (err: any) {
-      console.error('Error fetching dashboard data:', err);
-      setError(err?.message || 'No se pudieron obtener las métricas del servidor.');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+    },
+    [dateRange]
+  );
+
+  // Initial load: runs strictly once on mount
+  useEffect(() => {
+    const initialRange = calculatePresetDates('30dias');
+    fetchDashboardData(initialRange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Initial load
-  useEffect(() => {
-    const { from, to } = calculateDatesForPreset('30dias');
-    fetchMetrics(from, to);
-  }, [calculateDatesForPreset, fetchMetrics]);
-
-  // Handle Preset Clicks
+  // Handle Preset Clicks (inmediato, sin stale closures ni doble clic)
   const handlePresetSelect = (preset: PresetType) => {
+    const newRange = calculatePresetDates(preset);
     setActivePreset(preset);
-    const { from, to } = calculateDatesForPreset(preset);
-    if (preset !== 'todo') {
-      setFechaInicio(from);
-      setFechaFin(to);
-    } else {
-      setFechaInicio('2020-01-01');
-      setFechaFin(to);
-    }
-    fetchMetrics(from, to);
+    setDateRange(newRange);
+    fetchDashboardData(newRange);
   };
 
   // Handle Manual Apply Dates
   const handleApplyCustomDates = () => {
     setActivePreset('custom');
-    fetchMetrics(fechaInicio, fechaFin);
+    fetchDashboardData(dateRange);
   };
 
   const handleRefresh = () => {
-    const from = activePreset === 'todo' ? 'all' : fechaInicio;
-    fetchMetrics(from, fechaFin, true);
+    fetchDashboardData(dateRange, true);
   };
 
   // Memoized calculations and defensive fallbacks
@@ -412,7 +397,7 @@ export default function DashboardPage() {
           <span>
             {activePreset === 'todo'
               ? 'Mostrando datos del histórico completo'
-              : `Mostrando datos del ${formatDisplayDate(fechaInicio)} al ${formatDisplayDate(fechaFin)}`}
+              : `Mostrando datos del ${formatDisplayDate(dateRange.from)} al ${formatDisplayDate(dateRange.to)}`}
           </span>
         </div>
       </div>
@@ -476,9 +461,9 @@ export default function DashboardPage() {
               <span className="text-[11px] text-slate-500 font-semibold uppercase">Desde:</span>
               <input
                 type="date"
-                value={fechaInicio}
+                value={dateRange.from === 'all' ? '2020-01-01' : dateRange.from}
                 onChange={(e) => {
-                  setFechaInicio(e.target.value);
+                  setDateRange((prev) => ({ ...prev, from: e.target.value }));
                   setActivePreset('custom');
                 }}
                 className="bg-transparent text-xs text-white focus:outline-none cursor-pointer [color-scheme:dark]"
@@ -490,9 +475,9 @@ export default function DashboardPage() {
               <span className="text-[11px] text-slate-500 font-semibold uppercase">Hasta:</span>
               <input
                 type="date"
-                value={fechaFin}
+                value={dateRange.to}
                 onChange={(e) => {
-                  setFechaFin(e.target.value);
+                  setDateRange((prev) => ({ ...prev, to: e.target.value }));
                   setActivePreset('custom');
                 }}
                 className="bg-transparent text-xs text-white focus:outline-none cursor-pointer [color-scheme:dark]"

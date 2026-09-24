@@ -97,12 +97,10 @@ const DEFAULT_AROMAS = [
 ];
 
 const DEFAULT_MATERIALES = [
-  '100% Cera de Soya',
-  'Cera de Abeja',
-  'Mezcla Botánica',
-  'Cera de Coco',
-  'Flores Preservadas',
+  '100% Cera de Soya Natural',
+  'Flores Botánicas Naturales',
   'Cristales & Cuarzos',
+  'Pabilo de Algodón Orgánico',
 ];
 
 

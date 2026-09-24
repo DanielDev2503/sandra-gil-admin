@@ -54,3 +54,30 @@ export async function deleteProductImage(publicUrl: string): Promise<void> {
     console.error('Error al eliminar imagen:', error);
   }
 }
+
+/**
+ * Sube directamente un buffer a Supabase Storage (lado servidor) sin tocar disco local efímero.
+ */
+export async function uploadBufferToSupabaseStorage(
+  filePath: string,
+  fileBuffer: Buffer,
+  contentType: string
+): Promise<string> {
+  const { createServerClient } = await import('./supabase-server');
+  const supabase = createServerClient();
+  const { error } = await supabase.storage
+    .from('productos')
+    .upload(filePath, fileBuffer, {
+      contentType,
+      upsert: false,
+    });
+
+  if (error) throw error;
+
+  const {
+    data: { publicUrl },
+  } = supabase.storage.from('productos').getPublicUrl(filePath);
+
+  return publicUrl;
+}
+

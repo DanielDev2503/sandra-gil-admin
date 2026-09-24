@@ -33,6 +33,7 @@ model Producto {
   variaciones  VariacionProducto[]
   items        ItemPedido[]
   resenas      Resena[]
+  slug         String              @unique
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
 }
