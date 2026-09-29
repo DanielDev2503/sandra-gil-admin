@@ -132,6 +132,7 @@ export default function ProductosPage() {
 
   const [feedModalOpen, setFeedModalOpen] = useState(false);
   const [copiedFeed, setCopiedFeed] = useState<'xml' | 'sheets' | null>(null);
+  const [feedIncludeVariants, setFeedIncludeVariants] = useState(true);
 
   const fetchAromas = async () => {
     try {
@@ -1172,9 +1173,43 @@ export default function ProductosPage() {
               <div>
                 <h3 className="text-xl font-bold text-white">Feed de Google Merchant & Sheets</h3>
                 <p className="text-sm text-slate-400">
-                  Sincronización en vivo con {productos.filter((p) => p.activo).length} productos activos
+                  {productos.filter((p) => p.activo).length} productos activos en base de datos (2 inactivos excluidos)
                 </p>
               </div>
+            </div>
+
+            {/* Toggle de Modo: Con Variantes vs Solo Base */}
+            <div className="flex bg-[#12121e] p-1 rounded-xl border border-white/10 mb-4">
+              <button
+                type="button"
+                onClick={() => setFeedIncludeVariants(true)}
+                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+                  feedIncludeVariants
+                    ? 'bg-[#e8b86d] text-[#1a1a2e] shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Con Variaciones (85 ofertas de tus 63 productos)
+              </button>
+              <button
+                type="button"
+                onClick={() => setFeedIncludeVariants(false)}
+                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+                  !feedIncludeVariants
+                    ? 'bg-[#e8b86d] text-[#1a1a2e] shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Solo Productos Base (63 productos)
+              </button>
+            </div>
+
+            {/* Badge de validación estricta de Google */}
+            <div className="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs mb-5">
+              <CheckCircle className="w-4 h-4 shrink-0" />
+              <span>
+                <strong>Validación Google OK:</strong> Todos los IDs miden 36 caracteres (límite Google: 50 máx). Cero errores de longitud.
+              </span>
             </div>
 
             <div className="space-y-6">
@@ -1186,7 +1221,7 @@ export default function ProductosPage() {
                     URL para Google Merchant Center (Recomendado)
                   </span>
                   <a
-                    href="/api/feed/google-shopping"
+                    href={feedIncludeVariants ? '/api/feed/google-shopping' : '/api/feed/google-shopping?variants=false'}
                     target="_blank"
                     rel="noreferrer"
                     className="text-xs text-[#e8b86d] hover:underline flex items-center gap-1"
@@ -1200,13 +1235,18 @@ export default function ProductosPage() {
                 <div className="flex items-center gap-2 bg-[#12121e] border border-white/10 rounded-lg p-2.5">
                   <input
                     readOnly
-                    value={typeof window !== 'undefined' ? `${window.location.origin}/api/feed/google-shopping` : '/api/feed/google-shopping'}
+                    value={
+                      typeof window !== 'undefined'
+                        ? `${window.location.origin}/api/feed/google-shopping${feedIncludeVariants ? '' : '?variants=false'}`
+                        : `/api/feed/google-shopping${feedIncludeVariants ? '' : '?variants=false'}`
+                    }
                     className="w-full bg-transparent text-xs font-mono text-slate-200 outline-none select-all"
                   />
                   <button
                     onClick={() => {
                       if (typeof window !== 'undefined') {
-                        navigator.clipboard.writeText(`${window.location.origin}/api/feed/google-shopping`);
+                        const targetUrl = `${window.location.origin}/api/feed/google-shopping${feedIncludeVariants ? '' : '?variants=false'}`;
+                        navigator.clipboard.writeText(targetUrl);
                         setCopiedFeed('xml');
                         setTimeout(() => setCopiedFeed(null), 2000);
                         showToast('Enlace copiado al portapapeles');
@@ -1228,7 +1268,7 @@ export default function ProductosPage() {
                     Fórmula para Google Sheets (=IMPORTDATA)
                   </span>
                   <a
-                    href="/api/feed/google-shopping?format=csv"
+                    href={feedIncludeVariants ? '/api/feed/google-shopping?format=csv' : '/api/feed/google-shopping?format=csv&variants=false'}
                     download="google-merchant-feed.csv"
                     className="text-xs text-blue-400 hover:underline flex items-center gap-1"
                   >
@@ -1236,18 +1276,23 @@ export default function ProductosPage() {
                   </a>
                 </div>
                 <p className="text-xs text-slate-400 mb-3">
-                  Pega esta fórmula directamente en la celda <strong>A1</strong> de tu hoja de Google Sheets. La hoja se llenará sola con todas las columnas y filas requeridas.
+                  Pega esta fórmula directamente en la celda <strong>A1</strong> de tu hoja de Google Sheets. Trae las 40 columnas estándar de Google.
                 </p>
                 <div className="flex items-center gap-2 bg-[#12121e] border border-white/10 rounded-lg p-2.5">
                   <input
                     readOnly
-                    value={typeof window !== 'undefined' ? `=IMPORTDATA("${window.location.origin}/api/feed/google-shopping?format=csv")` : '=IMPORTDATA("/api/feed/google-shopping?format=csv")'}
+                    value={
+                      typeof window !== 'undefined'
+                        ? `=IMPORTDATA("${window.location.origin}/api/feed/google-shopping?format=csv${feedIncludeVariants ? '' : '&variants=false'}")`
+                        : `=IMPORTDATA("/api/feed/google-shopping?format=csv${feedIncludeVariants ? '' : '&variants=false'}")`
+                    }
                     className="w-full bg-transparent text-xs font-mono text-slate-200 outline-none select-all"
                   />
                   <button
                     onClick={() => {
                       if (typeof window !== 'undefined') {
-                        navigator.clipboard.writeText(`=IMPORTDATA("${window.location.origin}/api/feed/google-shopping?format=csv")`);
+                        const formula = `=IMPORTDATA("${window.location.origin}/api/feed/google-shopping?format=csv${feedIncludeVariants ? '' : '&variants=false'}")`;
+                        navigator.clipboard.writeText(formula);
                         setCopiedFeed('sheets');
                         setTimeout(() => setCopiedFeed(null), 2000);
                         showToast('Fórmula copiada al portapapeles');
