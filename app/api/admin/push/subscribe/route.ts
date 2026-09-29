@@ -83,8 +83,10 @@ export async function DELETE(request: Request) {
 export async function GET() {
   try {
     const count = await prisma.pushSubscription.count();
+    const publicKey = (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '').trim().replace(/^["']|["']$/g, '');
     return NextResponse.json({
       success: true,
+      publicKey,
       totalDispositivos: count,
     });
   } catch (error) {

@@ -1,10 +1,11 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
+import sharp from 'sharp';
 import { createServerClient } from '@/lib/supabase-server';
 import { applyWatermark } from '@/lib/watermark';
 
-const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg', 'image/avif'];
 
 export async function POST(request: Request) {
@@ -30,12 +31,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. Validar Tamaño Máximo (5MB)
+    // 2. Validar Tamaño Máximo (10MB)
     if (file.size > MAX_FILE_SIZE_BYTES) {
       const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
       return NextResponse.json(
         {
-          error: `El archivo es demasiado pesado (${sizeMb} MB). El límite máximo permitido es 5 MB.`,
+          error: `El archivo es demasiado pesado (${sizeMb} MB). El límite máximo permitido es 10 MB.`,
         },
         { status: 400 }
       );
@@ -52,26 +53,31 @@ export async function POST(request: Request) {
       );
     }
 
-    // 4. Determinar extensión y tipo de contenido
-    const contentType = rawType === 'image/jpg' ? 'image/jpeg' : rawType;
-    let ext = 'png';
-    if (contentType === 'image/webp') ext = 'webp';
-    else if (contentType === 'image/jpeg') ext = 'jpg';
-    else if (contentType === 'image/png') ext = 'png';
-    else if (contentType === 'image/avif') ext = 'avif';
+    // 4. Conservar marca de agua si el flujo actual incluye lógica de servidor
+    const watermarkedBuffer = await applyWatermark(buffer);
 
-    const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    // 5. Procesar con sharp: redimensionar máx 1200px ancho (sin agrandar), WebP calidad 80
+    const optimizedBuffer = await sharp(watermarkedBuffer)
+      .rotate()
+      .resize({
+        width: 1200,
+        withoutEnlargement: true,
+        fit: 'inside',
+      })
+      .webp({ quality: 80, effort: 4 })
+      .toBuffer();
+
+    // 6. Generar nombre de archivo con extensión obligatoria .webp
+    const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.webp`;
     const filePath = `velas/${uniqueName}`;
 
-    // 5. Procesar imagen en memoria si aplica marca de agua del servidor
-    const fileBuffer = await applyWatermark(buffer);
-
-    // 6. Subida directa a Supabase Storage con cliente autenticado del servidor
+    // 7. Subida directa a Supabase Storage con metadatos HTTP explícitos (1 año de caché)
     const supabase = createServerClient();
     const { error: uploadError } = await supabase.storage
       .from('productos')
-      .upload(filePath, fileBuffer, {
-        contentType: contentType,
+      .upload(filePath, optimizedBuffer, {
+        contentType: 'image/webp',
+        cacheControl: '31536000', // 1 año (inmutable)
         upsert: false,
       });
 

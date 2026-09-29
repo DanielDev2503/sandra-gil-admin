@@ -14,8 +14,9 @@ import {
 import { useToast } from '@/components/ToastContext';
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const cleanKey = base64String.trim().replace(/^["']|["']$/g, '');
+  const padding = '='.repeat((4 - (cleanKey.length % 4)) % 4);
+  const base64 = (cleanKey + padding).replace(/-/g, '+').replace(/_/g, '/');
   const rawData = window.atob(base64);
   const buffer = new ArrayBuffer(rawData.length);
   const outputArray = new Uint8Array(buffer);
@@ -115,7 +116,21 @@ export default function PushNotificationToggle({ collapsed = false }: PushNotifi
       return;
     }
 
-    const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    let vapidPublicKey = (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '').trim().replace(/^["']|["']$/g, '');
+    if (!vapidPublicKey) {
+      try {
+        const res = await fetch('/api/admin/push/subscribe');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.publicKey) {
+            vapidPublicKey = data.publicKey.trim().replace(/^["']|["']$/g, '');
+          }
+        }
+      } catch (e) {
+        console.error('Error fetching VAPID public key:', e);
+      }
+    }
+
     if (!vapidPublicKey) {
       showToast('Clave pública VAPID no configurada en el servidor.', 'error');
       return;
@@ -139,12 +154,12 @@ export default function PushNotificationToggle({ collapsed = false }: PushNotifi
         return;
       }
 
-      // 2. Registrar el Service Worker si no existe
-      const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-      await navigator.serviceWorker.ready;
+      // 2. Registrar el Service Worker y esperar a que esté activo
+      await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+      const readyReg = await navigator.serviceWorker.ready;
 
       // 3. Manejo de suscripción actual
-      const existingSub = await reg.pushManager.getSubscription();
+      const existingSub = await readyReg.pushManager.getSubscription();
 
       if (state === 'SUBSCRIBED' && existingSub) {
         // Desuscribir
@@ -158,9 +173,16 @@ export default function PushNotificationToggle({ collapsed = false }: PushNotifi
         setState('UNSUBSCRIBED');
         showToast('Notificaciones push desactivadas en este dispositivo.');
       } else {
-        // Suscribir
+        // Si ya existía una suscripción previa desfasada, desuscribirla primero para limpiar FCM
+        if (existingSub) {
+          try {
+            await existingSub.unsubscribe();
+          } catch {}
+        }
+
+        // Suscribir usando readyReg garantizado
         const convertedKey = urlBase64ToUint8Array(vapidPublicKey);
-        const newSub = await reg.pushManager.subscribe({
+        const newSub = await readyReg.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: convertedKey as unknown as BufferSource,
         });
@@ -180,7 +202,15 @@ export default function PushNotificationToggle({ collapsed = false }: PushNotifi
       }
     } catch (err: unknown) {
       console.error('[PushToggle] Error al alternar notificaciones:', err);
-      showToast(err instanceof Error ? err.message : 'Error al configurar notificaciones push', 'error');
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (errMsg.toLowerCase().includes('push service error')) {
+        showToast(
+          'Error del servicio Push: Si usas Brave activa "Usar los servicios de Google para la mensajería push" en brave://settings/privacy. En otros navegadores no uses modo incógnito.',
+          'error'
+        );
+      } else {
+        showToast(errMsg, 'error');
+      }
     } finally {
       setLoading(false);
     }

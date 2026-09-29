@@ -69,6 +69,7 @@ export async function uploadBufferToSupabaseStorage(
     .from('productos')
     .upload(filePath, fileBuffer, {
       contentType,
+      cacheControl: '31536000',
       upsert: false,
     });
 
