@@ -7,6 +7,16 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 export const metadata: Metadata = {
   title: 'Sandra Gil — Panel Administrativo',
   description: 'Backoffice de gestión para la tienda de velas artesanales Sandra Gil',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'SG Admin',
+  },
+  icons: {
+    icon: '/logo-sandra.png',
+    apple: '/logo-sandra.png',
+  },
   robots: {
     index: false,
     follow: false,

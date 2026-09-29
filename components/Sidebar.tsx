@@ -16,6 +16,7 @@ import {
   Menu,
   X,
 } from 'lucide-react';
+import PushNotificationToggle from '@/components/PushNotificationToggle';
 
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
@@ -130,6 +131,11 @@ export default function Sidebar() {
             );
           })}
         </nav>
+
+        {/* Web Push Notification Alerts */}
+        <div className="px-3 pb-1">
+          <PushNotificationToggle collapsed={isCollapsed} />
+        </div>
 
         {/* Logout */}
         <div className="p-3 border-t border-white/5">

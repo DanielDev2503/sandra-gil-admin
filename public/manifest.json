@@ -1,0 +1,23 @@
+{
+  "name": "Sandra Gil - Admin",
+  "short_name": "SG Admin",
+  "description": "Panel de administración y gestión de pedidos para Sandra Gil Velas",
+  "start_url": "/admin",
+  "display": "standalone",
+  "background_color": "#0f0f1a",
+  "theme_color": "#1a1a2e",
+  "icons": [
+    {
+      "src": "/logo-sandra.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo-sandra.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

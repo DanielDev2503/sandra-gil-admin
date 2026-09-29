@@ -1,7 +1,8 @@
 export const dynamic = 'force-dynamic';
 
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { prisma } from '@/lib/db';
+import { notificarDispositivosAdmin } from '@/lib/push-notifications';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -107,6 +108,109 @@ export async function GET(request: Request) {
     console.error('Error al obtener pedidos:', error);
     return NextResponse.json(
       { error: error?.message || 'Error al obtener pedidos', pedidos: [], total: 0, page: 1, totalPages: 1 },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+
+    const {
+      cliente_nombre,
+      cliente_email,
+      cliente_telefono,
+      ciudad,
+      direccion_envio,
+      notas_entrega,
+      total_productos,
+      costo_envio = 0,
+      total_pagado,
+      estado_pago = 'pendiente',
+      id_transaccion_wompi,
+      estado_envio = 'PENDING',
+      numero_guia,
+      notas_admin,
+      items = [],
+    } = body;
+
+    if (!cliente_nombre || !cliente_email || !cliente_telefono || !ciudad || !direccion_envio) {
+      return NextResponse.json(
+        { error: 'Faltan campos obligatorios del cliente y dirección de envío' },
+        { status: 400 }
+      );
+    }
+
+    const nuevoPedido = await prisma.pedido.create({
+      data: {
+        cliente_nombre,
+        cliente_email,
+        cliente_telefono,
+        ciudad,
+        direccion_envio,
+        notas_entrega,
+        total_productos: Number(total_productos) || 0,
+        costo_envio: Number(costo_envio) || 0,
+        total_pagado: Number(total_pagado) || 0,
+        estado_pago,
+        id_transaccion_wompi,
+        estado_envio,
+        numero_guia,
+        notas_admin,
+        items:
+          Array.isArray(items) && items.length > 0
+            ? {
+                create: items.map((it: {
+                  producto_id: string;
+                  variacion_id?: string | null;
+                  variacion_nombre?: string | null;
+                  variacion_imagen?: string | null;
+                  cantidad?: number;
+                  precio_unitario?: number;
+                  aroma?: string | null;
+                }) => ({
+                  producto_id: it.producto_id,
+                  variacion_id: it.variacion_id || null,
+                  variacion_nombre: it.variacion_nombre || null,
+                  variacion_imagen: it.variacion_imagen || null,
+                  cantidad: Number(it.cantidad) || 1,
+                  precio_unitario: Number(it.precio_unitario) || 0,
+                  aroma: it.aroma || null,
+                })),
+              }
+            : undefined,
+      },
+      include: {
+        items: true,
+      },
+    });
+
+    // Inyección no bloqueante de Web Push Notifications usando after() de Next.js (Vercel Best Practices)
+    after(async () => {
+      try {
+        const totalFormateado = new Intl.NumberFormat('es-CO', {
+          style: 'currency',
+          currency: 'COP',
+          maximumFractionDigits: 0,
+        }).format(nuevoPedido.total_pagado);
+
+        await notificarDispositivosAdmin({
+          titulo: `🕯️ ¡Nuevo Pedido en Sandra Gil!`,
+          mensaje: `${nuevoPedido.cliente_nombre} • ${totalFormateado} (${nuevoPedido.ciudad})`,
+          url: `/admin/ordenes`,
+          tag: `pedido-${nuevoPedido.id}`,
+        });
+      } catch (pushErr) {
+        console.error('[WebPush] Error no bloqueante notificando nuevo pedido:', pushErr);
+      }
+    });
+
+    return NextResponse.json(nuevoPedido, { status: 201 });
+  } catch (error: any) {
+    console.error('Error al registrar pedido:', error);
+    return NextResponse.json(
+      { error: error?.message || 'Error al registrar pedido' },
       { status: 500 }
     );
   }
