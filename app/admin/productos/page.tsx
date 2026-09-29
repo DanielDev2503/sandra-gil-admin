@@ -24,6 +24,11 @@ import {
   AlertCircle,
   Flame,
   Layers,
+  Share2,
+  Copy,
+  Check,
+  Download,
+  ExternalLink,
 } from 'lucide-react';
 
 import { useToast } from '@/components/ToastContext';
@@ -124,6 +129,9 @@ export default function ProductosPage() {
   const [editingAromaVal, setEditingAromaVal] = useState('');
   const [editingMaterialIdx, setEditingMaterialIdx] = useState<number | null>(null);
   const [editingMaterialVal, setEditingMaterialVal] = useState('');
+
+  const [feedModalOpen, setFeedModalOpen] = useState(false);
+  const [copiedFeed, setCopiedFeed] = useState<'xml' | 'sheets' | null>(null);
 
   const fetchAromas = async () => {
     try {
@@ -581,6 +589,13 @@ export default function ProductosPage() {
           <p className="text-slate-400 mt-1">{(productos?.length ?? 0)} productos encontrados</p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setFeedModalOpen(true)}
+            className="flex items-center gap-2 bg-[#1a1a2e] hover:bg-white/5 text-[#e8b86d] border border-[#e8b86d]/30 hover:border-[#e8b86d]/60 font-semibold px-4 py-3 rounded-xl transition-all duration-200 text-sm shadow-sm"
+          >
+            <Share2 className="w-4 h-4" />
+            Feed Google Shopping
+          </button>
           <button
             onClick={() => setGestionOpen(true)}
             className="flex items-center gap-2 bg-[#1a1a2e] hover:bg-white/5 text-slate-300 border border-white/10 font-semibold px-4 py-3 rounded-xl transition-all duration-200 text-sm"
@@ -1134,6 +1149,126 @@ export default function ProductosPage() {
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Feed Google Shopping Modal */}
+      {feedModalOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1a1a2e] border border-[#e8b86d]/20 rounded-2xl p-6 sm:p-8 w-full max-w-2xl shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setFeedModalOpen(false)}
+              className="absolute top-5 right-5 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-all"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-3 bg-[#e8b86d]/10 text-[#e8b86d] rounded-xl border border-[#e8b86d]/20">
+                <Share2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white">Feed de Google Merchant & Sheets</h3>
+                <p className="text-sm text-slate-400">
+                  Sincronización en vivo con {productos.filter((p) => p.activo).length} productos activos
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              {/* Opción 1: Google Merchant Center (Scheduled Fetch) */}
+              <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-semibold text-white flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    URL para Google Merchant Center (Recomendado)
+                  </span>
+                  <a
+                    href="/api/feed/google-shopping"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-[#e8b86d] hover:underline flex items-center gap-1"
+                  >
+                    Ver XML en vivo <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+                <p className="text-xs text-slate-400 mb-3">
+                  Pega esta URL en Google Merchant Center &gt; Productos &gt; Fuentes de datos &gt; Recuperación programada (diaria).
+                </p>
+                <div className="flex items-center gap-2 bg-[#12121e] border border-white/10 rounded-lg p-2.5">
+                  <input
+                    readOnly
+                    value={typeof window !== 'undefined' ? `${window.location.origin}/api/feed/google-shopping` : '/api/feed/google-shopping'}
+                    className="w-full bg-transparent text-xs font-mono text-slate-200 outline-none select-all"
+                  />
+                  <button
+                    onClick={() => {
+                      if (typeof window !== 'undefined') {
+                        navigator.clipboard.writeText(`${window.location.origin}/api/feed/google-shopping`);
+                        setCopiedFeed('xml');
+                        setTimeout(() => setCopiedFeed(null), 2000);
+                        showToast('Enlace copiado al portapapeles');
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#e8b86d] hover:bg-[#d4a85a] text-[#1a1a2e] rounded-md text-xs font-semibold transition-all shrink-0"
+                  >
+                    {copiedFeed === 'xml' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copiedFeed === 'xml' ? 'Copiado' : 'Copiar'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Opción 2: Google Sheets fórmula IMPORTDATA */}
+              <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-semibold text-white flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                    Fórmula para Google Sheets (=IMPORTDATA)
+                  </span>
+                  <a
+                    href="/api/feed/google-shopping?format=csv"
+                    download="google-merchant-feed.csv"
+                    className="text-xs text-blue-400 hover:underline flex items-center gap-1"
+                  >
+                    <Download className="w-3 h-3" /> Descargar CSV
+                  </a>
+                </div>
+                <p className="text-xs text-slate-400 mb-3">
+                  Pega esta fórmula directamente en la celda <strong>A1</strong> de tu hoja de Google Sheets. La hoja se llenará sola con todas las columnas y filas requeridas.
+                </p>
+                <div className="flex items-center gap-2 bg-[#12121e] border border-white/10 rounded-lg p-2.5">
+                  <input
+                    readOnly
+                    value={typeof window !== 'undefined' ? `=IMPORTDATA("${window.location.origin}/api/feed/google-shopping?format=csv")` : '=IMPORTDATA("/api/feed/google-shopping?format=csv")'}
+                    className="w-full bg-transparent text-xs font-mono text-slate-200 outline-none select-all"
+                  />
+                  <button
+                    onClick={() => {
+                      if (typeof window !== 'undefined') {
+                        navigator.clipboard.writeText(`=IMPORTDATA("${window.location.origin}/api/feed/google-shopping?format=csv")`);
+                        setCopiedFeed('sheets');
+                        setTimeout(() => setCopiedFeed(null), 2000);
+                        showToast('Fórmula copiada al portapapeles');
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-md text-xs font-semibold transition-all shrink-0"
+                  >
+                    {copiedFeed === 'sheets' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copiedFeed === 'sheets' ? 'Copiada' : 'Copiar'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 pt-4 border-t border-white/10 flex justify-end">
+              <button
+                onClick={() => setFeedModalOpen(false)}
+                className="px-5 py-2.5 bg-white/10 hover:bg-white/15 text-white text-sm font-medium rounded-xl transition-all"
+              >
+                Cerrar
+              </button>
             </div>
           </div>
         </div>
