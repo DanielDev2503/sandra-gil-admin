@@ -95,6 +95,10 @@ model Pedido {
   numero_guia          String?
   notas_admin          String?
   items                ItemPedido[]
+
+  @@index([creado_en])
+  @@index([estado_pago])
+  @@index([estado_envio])
 }
 
 model ItemPedido {
@@ -109,6 +113,9 @@ model ItemPedido {
   cantidad         Int
   precio_unitario  Float
   aroma            String?
+
+  @@index([pedido_id])
+  @@index([producto_id])
 }
 
 model Resena {
@@ -119,7 +126,10 @@ model Resena {
   calificacion Int
   comentario  String
   creado_en   DateTime @default(now())
+
+  @@index([producto_id])
 }
+
 
 model FAQ {
   id        String   @id @default(uuid())

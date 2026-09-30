@@ -9,6 +9,8 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["POSTGRES_URL_NON_POOLING"] || process.env["DATABASE_URL"]!,
+    // Para migraciones y Prisma CLI se requiere conexión directa (puerto 5432, DIRECT_URL)
+    url: process.env["DIRECT_URL"] || process.env["POSTGRES_URL_NON_POOLING"] || process.env["DATABASE_URL"]!,
   },
 });
+

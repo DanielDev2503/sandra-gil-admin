@@ -76,7 +76,17 @@ export async function notificarDispositivosAdmin(
     };
 
     try {
-      await webpush.sendNotification(pushSubscription, notificationPayload);
+      // Timeout estricto de 4 segundos por endpoint para evitar que un push server bloquee la Serverless Function
+      const pushPromise = webpush.sendNotification(pushSubscription, notificationPayload, {
+        timeout: 4000,
+        TTL: 3600,
+      });
+
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Push notification timeout (>4s)')), 4000)
+      );
+
+      await Promise.race([pushPromise, timeoutPromise]);
       enviados++;
     } catch (err: unknown) {
       fallidos++;
@@ -97,6 +107,7 @@ export async function notificarDispositivosAdmin(
       }
     }
   });
+
 
   await Promise.allSettled(sendPromises);
 

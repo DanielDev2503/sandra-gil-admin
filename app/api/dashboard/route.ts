@@ -143,9 +143,10 @@ export async function GET(request: Request) {
         _sum: { total_pagado: true },
         _count: { id: true },
       }),
-      // 2. Todos los pedidos del rango para serie temporal, embudo y zonas
+      // 2. Pedidos del rango para serie temporal, embudo y zonas (con límite estricto de seguridad)
       prisma.pedido.findMany({
         where: { creado_en: whereDateClause },
+        take: 2000,
         select: {
           id: true,
           total_pagado: true,
@@ -192,7 +193,7 @@ export async function GET(request: Request) {
           creado_en: true,
         },
       }),
-      // 7. Items de pedidos aprobados para top aromas y materiales
+      // 7. Items de pedidos aprobados para top aromas y materiales (con límite estricto de seguridad)
       prisma.itemPedido.findMany({
         where: {
           pedido: {
@@ -200,6 +201,7 @@ export async function GET(request: Request) {
             estado_pago: { in: ['APPROVED', 'pagado', 'approved', 'Pagado'] },
           },
         },
+        take: 5000,
         select: {
           cantidad: true,
           aroma: true,
@@ -213,6 +215,7 @@ export async function GET(request: Request) {
         },
       }),
     ]);
+
 
     const totalVentas = ventasAprobadasAggregate._sum?.total_pagado ?? 0;
     const totalOrdenesAprobadas = ventasAprobadasAggregate._count?.id ?? 0;

@@ -114,7 +114,17 @@ export default function ProductosPage() {
   const [productos, setProductos] = useState<Producto[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filtroTipo, setFiltroTipo] = useState<string>('');
+
+  // Debounce para evitar consultas continuas a la base de datos por cada pulsación de tecla
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
 
   // Dynamic Aromas & Materiales with API persistence
   const [aromas, setAromas] = useState<string[]>(DEFAULT_AROMAS);
@@ -310,7 +320,7 @@ export default function ProductosPage() {
   const fetchProductos = async () => {
     setLoading(true);
     const params = new URLSearchParams();
-    if (search) params.set('search', search);
+    if (debouncedSearch) params.set('search', debouncedSearch);
     if (filtroActivo !== '') params.set('activo', filtroActivo);
     if (filtroTipo) params.set('tipo', filtroTipo);
     if (filtroAroma) params.set('aroma', filtroAroma);
@@ -325,7 +335,8 @@ export default function ProductosPage() {
   useEffect(() => {
     fetchProductos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, filtroActivo, filtroTipo, filtroAroma, filtroMaterial, filtroBajoPedido]);
+  }, [debouncedSearch, filtroActivo, filtroTipo, filtroAroma, filtroMaterial, filtroBajoPedido]);
+
 
   /* ─── Modal helpers ─── */
 

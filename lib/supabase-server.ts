@@ -1,11 +1,19 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+
+const globalForSupabase = globalThis as unknown as {
+  supabaseServerClient: SupabaseClient | undefined;
+};
 
 /**
- * Cliente Supabase server-side con service role key.
- * Úsalo SOLO en API routes / server actions para operaciones
- * que requieren permisos elevados (ej: subir a Storage sin auth del browser).
+ * Cliente Supabase server-side singleton con persistencia en globalThis.
+ * Úsalo en API routes / server actions para operaciones
+ * en Storage y Auth sin reinstanciar clientes innecesariamente.
  */
-export function createServerClient() {
+export function createServerClient(): SupabaseClient {
+  if (globalForSupabase.supabaseServerClient) {
+    return globalForSupabase.supabaseServerClient;
+  }
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   const key =
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
@@ -18,7 +26,11 @@ export function createServerClient() {
     );
   }
 
-  return createClient(url, key, {
+  const client = createClient(url, key, {
     auth: { persistSession: false },
   });
+
+  globalForSupabase.supabaseServerClient = client;
+  return client;
 }
+

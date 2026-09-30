@@ -1,57 +1,52 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase-server';
+import { deleteStorageFilesServer } from '@/lib/storage-server';
 
 /**
- * DELETE /api/productos/delete-image
- * Body: { publicUrl: string }
+ * POST /api/productos/delete-image
+ * Body: { publicUrl?: string, publicUrls?: string[] }
  *
- * Deletes a product image from Supabase Storage using the server-side client.
- * This is more reliable than deleting from the browser because it uses
- * the service role key (or anon key with proper RLS policies).
+ * Elimina imágenes de Supabase Storage de manera segura en el servidor.
  */
 export async function POST(request: Request) {
   try {
-    const { publicUrl } = await request.json();
+    const body = await request.json();
+    const urls: string[] = [];
 
-    if (!publicUrl || typeof publicUrl !== 'string') {
+    if (typeof body.publicUrl === 'string' && body.publicUrl.trim()) {
+      urls.push(body.publicUrl.trim());
+    }
+
+    if (Array.isArray(body.publicUrls)) {
+      for (const u of body.publicUrls) {
+        if (typeof u === 'string' && u.trim()) {
+          urls.push(u.trim());
+        }
+      }
+    }
+
+    if (urls.length === 0) {
       return NextResponse.json(
-        { error: 'Se requiere publicUrl' },
+        { error: 'Se requiere publicUrl o publicUrls' },
         { status: 400 }
       );
     }
 
-    // Extract the relative path from the public URL
-    // Format: https://{project}.supabase.co/storage/v1/object/public/productos/{path}
-    const marker = '/storage/v1/object/public/productos/';
-    const idx = publicUrl.indexOf(marker);
-    if (idx === -1) {
+    const { deleted, errors } = await deleteStorageFilesServer(urls, 'productos');
+
+    if (errors.length > 0 && deleted.length === 0) {
       return NextResponse.json(
-        { error: 'URL de imagen no válida para el bucket productos' },
-        { status: 400 }
-      );
-    }
-
-    const filePath = publicUrl.substring(idx + marker.length);
-
-    const supabase = createServerClient();
-    const { error } = await supabase.storage
-      .from('productos')
-      .remove([filePath]);
-
-    if (error) {
-      console.error('Error al eliminar imagen de Storage:', error.message);
-      return NextResponse.json(
-        { error: `Error al eliminar: ${error.message}` },
+        { error: `Error al eliminar de Storage: ${errors.join(', ')}` },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, deleted, errors });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error interno';
     console.error('Error en delete-image:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
