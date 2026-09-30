@@ -28,9 +28,10 @@ export async function GET(
     }
 
     return NextResponse.json(producto);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error al obtener producto por id:', error);
-    return NextResponse.json({ error: 'Error al obtener producto' }, { status: 500 });
+    const message = error instanceof Error ? error.message : (error?.message || 'Error al obtener producto');
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -40,7 +41,15 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const body = await request.json();
+    let body: any;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: 'Cuerpo de solicitud JSON inválido' },
+        { status: 400 }
+      );
+    }
 
     // Autogenerar slug si no viene o sanitizarlo
     if (!body.slug && body.nombre) {
@@ -262,8 +271,9 @@ export async function PUT(
       }
     }
 
+    const message = error instanceof Error ? error.message : (error?.message || 'Error interno al actualizar producto');
     return NextResponse.json(
-      { error: error?.message || 'Error interno al actualizar producto' },
+      { error: message },
       { status: 500 }
     );
   }
@@ -336,8 +346,9 @@ export async function DELETE(
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('Error al eliminar producto:', error);
+    const message = error instanceof Error ? error.message : (error?.message || 'Error al eliminar producto');
     return NextResponse.json(
-      { error: error?.message || 'Error al eliminar producto' },
+      { error: message },
       { status: 500 }
     );
   }

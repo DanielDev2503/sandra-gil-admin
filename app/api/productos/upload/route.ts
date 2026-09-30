@@ -1,7 +1,6 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import sharp from 'sharp';
 import { createServerClient } from '@/lib/supabase-server';
 import { applyWatermark } from '@/lib/watermark';
 
@@ -56,7 +55,8 @@ export async function POST(request: Request) {
     // 4. Conservar marca de agua si el flujo actual incluye lógica de servidor
     const watermarkedBuffer = await applyWatermark(buffer);
 
-    // 5. Procesar con sharp: redimensionar máx 1200px ancho (sin agrandar), WebP calidad 80
+    // 5. Procesar con sharp dinámicamente: redimensionar máx 1200px ancho (sin agrandar), WebP calidad 80
+    const { default: sharp } = await import('sharp');
     const optimizedBuffer = await sharp(watermarkedBuffer)
       .rotate()
       .resize({

@@ -566,8 +566,21 @@ export default function ProductosPage() {
         setModalOpen(false);
         fetchProductos();
       } else {
-        const data = await r.json();
-        showToast(data.error || 'Error al guardar producto', 'error');
+        const contentType = r.headers.get('content-type') || '';
+        let msg = `Error al guardar producto (${r.status})`;
+        if (contentType.includes('application/json')) {
+          try {
+            const data = await r.json();
+            msg = data.error || data.message || msg;
+          } catch {
+            // fallback al mensaje base
+          }
+        } else {
+          const rawText = await r.text().catch(() => '');
+          console.error('El servidor devolvió una respuesta no JSON:', rawText.slice(0, 300));
+          msg = `El servidor devolvió un error inesperado (${r.status}).`;
+        }
+        showToast(msg, 'error');
       }
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Error al guardar producto', 'error');

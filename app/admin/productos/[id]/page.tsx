@@ -50,7 +50,15 @@ export default function EditarProductoPage({
   useEffect(() => {
     Promise.all([
       fetch('/api/admin/aromas').then((r) => r.json()).catch(() => []),
-      fetch(`/api/productos/${id}`).then((r) => r.json()).catch(() => null),
+      fetch(`/api/productos/${id}`)
+        .then(async (r) => {
+          const contentType = r.headers.get('content-type') || '';
+          if (r.ok && contentType.includes('application/json')) {
+            return r.json();
+          }
+          return null;
+        })
+        .catch(() => null),
     ]).then(([aromasData, productoData]) => {
       if (Array.isArray(aromasData)) {
         const fetched = aromasData.map((a: { nombre: string }) => a.nombre);
@@ -167,13 +175,30 @@ export default function EditarProductoPage({
         body: JSON.stringify(payload),
       });
 
+      const contentType = res.headers.get('content-type') || '';
+      const isJson = contentType.includes('application/json');
+
       if (res.ok) {
+        if (isJson) {
+          await res.json().catch(() => null);
+        }
         toast.success('¡Producto actualizado exitosamente!');
         router.push('/admin/productos');
         router.refresh();
       } else {
-        const err = await res.json();
-        const msg = err.error || 'Error al actualizar el producto';
+        let msg = `Error al actualizar el producto (${res.status})`;
+        if (isJson) {
+          try {
+            const err = await res.json();
+            msg = err.error || err.message || msg;
+          } catch {
+            // fallback al mensaje con status
+          }
+        } else {
+          const text = await res.text().catch(() => '');
+          console.error('El servidor devolvió una respuesta no JSON:', text.slice(0, 300));
+          msg = `El servidor devolvió un error inesperado (${res.status}).`;
+        }
         setErrorMessage(msg);
         toast.error(msg);
       }

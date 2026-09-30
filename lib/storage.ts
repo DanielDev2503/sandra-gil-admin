@@ -19,9 +19,20 @@ export async function uploadProductImage(file: File): Promise<string> {
     body: formData,
   });
 
+  const contentType = response.headers.get('content-type') || '';
+  const isJson = contentType.includes('application/json');
+
   if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || 'Error al subir imagen con marca de agua');
+    let msg = `Error al subir imagen (${response.status})`;
+    if (isJson) {
+      const err = await response.json().catch(() => ({}));
+      msg = err.error || err.message || msg;
+    }
+    throw new Error(msg);
+  }
+
+  if (!isJson) {
+    throw new Error(`El servidor devolvió una respuesta inesperada (${response.status})`);
   }
 
   const data = await response.json();

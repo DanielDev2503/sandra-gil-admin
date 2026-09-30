@@ -1,4 +1,3 @@
-import sharp from 'sharp';
 import { createServerClient } from './supabase-server';
 
 /**
@@ -57,6 +56,7 @@ export async function uploadOptimizedBufferToStorage(
   buffer: Buffer,
   bucket = 'productos'
 ): Promise<string> {
+  const { default: sharp } = await import('sharp');
   const optimizedBuffer = await sharp(buffer)
     .rotate()
     .resize({

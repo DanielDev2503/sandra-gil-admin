@@ -129,13 +129,30 @@ export default function NuevoProductoPage() {
         body: JSON.stringify(payload),
       });
 
+      const contentType = res.headers.get('content-type') || '';
+      const isJson = contentType.includes('application/json');
+
       if (res.ok) {
+        if (isJson) {
+          await res.json().catch(() => null);
+        }
         toast.success('¡Producto creado exitosamente!');
         router.push('/admin/productos');
         router.refresh();
       } else {
-        const err = await res.json();
-        const msg = err.error || 'Error al crear el producto';
+        let msg = `Error al crear el producto (${res.status})`;
+        if (isJson) {
+          try {
+            const err = await res.json();
+            msg = err.error || err.message || msg;
+          } catch {
+            // fallback al mensaje con status
+          }
+        } else {
+          const text = await res.text().catch(() => '');
+          console.error('El servidor devolvió una respuesta no JSON:', text.slice(0, 300));
+          msg = `El servidor devolvió un error inesperado (${res.status}).`;
+        }
         setErrorMessage(msg);
         toast.error(msg);
       }
